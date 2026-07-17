@@ -1,0 +1,12 @@
+{
+  "InventoryMode": "Full",
+  "OpenOutputFolder": true,
+  "GenerateJSON": true,
+  "GenerateHTML": true,
+  "GenerateCSV": false,
+  "IncludeIPv6": true,
+  "IncludeDisconnectedAdapters": false,
+  "IncludeDeviceErrors": true,
+  "OutputDirectory": ".\\Output",
+  "LogDirectory": ".\\Logs"
+}
