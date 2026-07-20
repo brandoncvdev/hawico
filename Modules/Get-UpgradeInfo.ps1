@@ -8,8 +8,21 @@
                 Status          = Get-SafeString $_.Status
                 CurrentUsage    = Get-SystemSlotUsageName $_.CurrentUsage
                 MaxDataWidth    = $_.MaxDataWidth
-                Purpose         = Get-SafeString $_.Purpose
-                SupportsHotPlug = $_.SupportsHotPlug
+                Purpose = if ($_.PSObject.Properties.Name -contains "Purpose") {
+                    Get-SafeString $_.Purpose
+                }
+                else {
+                    $null
+                }
+
+                SupportsHotPlug = if (
+                    $_.PSObject.Properties.Name -contains "SupportsHotPlug"
+                ) {
+                    $_.SupportsHotPlug
+                }
+                else {
+                    $null
+                }
             }
         }
     )
@@ -17,9 +30,25 @@
     return [ordered]@{
         Slots = $slots
         Summary = [ordered]@{
-            TotalReported = $raw.Count
-            AvailableReported = @($raw | Where-Object { $_.CurrentUsage -eq 3 }).Count
-            OccupiedReported = @($raw | Where-Object { $_.CurrentUsage -eq 4 }).Count
+            TotalReported = (
+                $raw | Measure-Object
+            ).Count
+
+            AvailableReported = (
+                $raw |
+                Where-Object {
+                    $_.CurrentUsage -eq 3
+                } |
+                Measure-Object
+            ).Count
+
+            OccupiedReported = (
+                $raw |
+                Where-Object {
+                    $_.CurrentUsage -eq 4
+                } |
+                Measure-Object
+            ).Count
             Reliability = "ManufacturerReported"
             RequiresPhysicalVerification = $true
         }

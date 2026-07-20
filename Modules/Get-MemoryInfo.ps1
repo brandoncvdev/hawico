@@ -19,22 +19,28 @@
     )
 
     $totalSlots = 0
-    if ($arraysRaw.Count -gt 0) {
+    if (($arraysRaw | Measure-Object).Count -gt 0) {
         $m = $arraysRaw | Measure-Object -Property MemoryDevices -Sum
         if ($null -ne $m.Sum) { $totalSlots = [int]$m.Sum }
     }
 
-    $occupiedSlots = @($modulesRaw | Where-Object { $null -ne $_.Capacity -and [double]$_.Capacity -gt 0 }).Count
+    $occupiedSlots = (
+        $modulesRaw |
+        Where-Object {
+            $null -ne $_.Capacity -and [double]$_.Capacity -gt 0
+        } |
+        Measure-Object
+    ).Count
     $availableSlots = [math]::Max(0, $totalSlots - $occupiedSlots)
 
     $installedBytes = 0
-    if ($modulesRaw.Count -gt 0) {
+    if (($modulesRaw | Measure-Object).Count -gt 0) {
         $m = $modulesRaw | Measure-Object -Property Capacity -Sum
         if ($null -ne $m.Sum) { $installedBytes = [double]$m.Sum }
     }
 
     $maximumKB = 0
-    if ($arraysRaw.Count -gt 0) {
+    if (($arraysRaw | Measure-Object).Count -gt 0) {
         $m = $arraysRaw | Measure-Object -Property MaxCapacityEx -Sum
         if ($null -ne $m.Sum -and [double]$m.Sum -gt 0) {
             $maximumKB = [double]$m.Sum
