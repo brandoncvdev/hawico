@@ -63,9 +63,25 @@
         Detailed = $detailed
         Logical = $logical
         Upgrade = [ordered]@{
-            InstalledPhysicalDisks = $physicalRaw.Count
-            InstalledNVMeDisks = @($detailed | Where-Object { $_.BusType -eq "NVMe" }).Count
-            InstalledSATADisks = @($detailed | Where-Object { $_.BusType -eq "SATA" }).Count
+            InstalledPhysicalDisks = (
+                $physicalRaw | Measure-Object
+            ).Count
+
+            InstalledNVMeDisks = (
+                $detailed |
+                Where-Object {
+                    $_.BusType -eq "NVMe"
+                } |
+                Measure-Object
+            ).Count
+
+            InstalledSATADisks = (
+                $detailed |
+                Where-Object {
+                    $_.BusType -eq "SATA"
+                } |
+                Measure-Object
+            ).Count
             FreeM2Slots = $null
             FreeSataPorts = $null
             RequiresPhysicalVerification = $true
