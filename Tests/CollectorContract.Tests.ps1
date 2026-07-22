@@ -6,4 +6,5 @@ Describe 'Collector_Windows_HealthCheck.ps1 contract' {
  It 'does not contain repair or optimization commands' { $script|Should -Not -Match '(?i)chkdsk|RestoreHealth|scannow|defrag|Optimize-Volume' }
  It 'produces the documented log artifact and measures the collection' { $script|Should -Match '-health\.log';$script|Should -Match 'LogPath';$script|Should -Match 'Stopwatch' }
  It 'contains independent collection failures instead of aborting later sections' { $script|Should -Match 'Invoke-HealthCollectorSection';$script|Should -Match 'Get-CriticalEventResult' }
+ It 'shows collection progress while the diagnostic is running' { $script|Should -Match 'Write-Progress';$script|Should -Match 'PercentComplete' }
 }

@@ -6,6 +6,19 @@ function Get-HealthInputValue {
     return $DefaultValue
 }
 
+function Get-HealthNumericSum {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Items,
+        [Parameter(Mandatory)][string]$PropertyName
+    )
+    $total = 0.0
+    foreach ($item in $Items) {
+        $value = Get-HealthInputValue -Object $item -Name $PropertyName
+        if ($null -ne $value) { $total += [double]$value }
+    }
+    return $total
+}
+
 function ConvertTo-HealthSectionRecord {
     param([string]$Name, [string]$Status, [AllowNull()][object]$Source, [AllowNull()][object]$SampleCount)
     $startedAt = Get-HealthInputValue -Object $Source -Name 'StartedAt'
@@ -42,10 +55,10 @@ function Invoke-HealthCheck {
     $healthConfig = Get-HealthInputValue -Object $InputData -Name 'HealthConfig'
 
     $diskProviders = @('Disk', 'Ntfs', 'StorPort', 'stornvme')
-    $diskEventCount = [int](($events | Where-Object { $_.Provider -in $diskProviders } | Measure-Object -Property OccurrenceCount -Sum).Sum)
-    $wheaCount = [int](($events | Where-Object Provider -eq 'WHEA-Logger' | Measure-Object -Property OccurrenceCount -Sum).Sum)
-    $kernelPowerCount = [int](($events | Where-Object Provider -eq 'Kernel-Power' | Measure-Object -Property OccurrenceCount -Sum).Sum)
-    $applicationFailureCount = [int](($events | Where-Object { $_.Provider -in @('Application Error', 'Application Hang') } | Measure-Object -Property OccurrenceCount -Sum).Sum)
+    $diskEventCount = [int](Get-HealthNumericSum -Items @($events | Where-Object { $_.Provider -in $diskProviders }) -PropertyName 'OccurrenceCount')
+    $wheaCount = [int](Get-HealthNumericSum -Items @($events | Where-Object Provider -eq 'WHEA-Logger') -PropertyName 'OccurrenceCount')
+    $kernelPowerCount = [int](Get-HealthNumericSum -Items @($events | Where-Object Provider -eq 'Kernel-Power') -PropertyName 'OccurrenceCount')
+    $applicationFailureCount = [int](Get-HealthNumericSum -Items @($events | Where-Object { $_.Provider -in @('Application Error', 'Application Hang') }) -PropertyName 'OccurrenceCount')
 
     $physicalDisks = @($storage.PhysicalDisks)
     $explicitDegraded = @($physicalDisks | Where-Object { $_.HealthStatus -notin @($null, '', 'Unknown', 'Healthy') } | Select-Object -First 1)
@@ -100,8 +113,7 @@ function Invoke-HealthCheck {
         $name = $definition[0]
         $available = if ($name -in @('CPU', 'Memory')) { $performanceAvailable } elseif ($name -eq 'Storage') { $storageAvailable } else { $eventsAvailable }
         $items = @($findings | Where-Object Category -eq $name)
-        $sum = ($items | Measure-Object -Property ScoreImpact -Sum).Sum
-        if ($null -eq $sum) { $sum = 0 }
+        $sum = Get-HealthNumericSum -Items $items -PropertyName 'ScoreImpact'
         $categories += [pscustomobject][ordered]@{
             Name = $name
             Weight = [int]$definition[1]

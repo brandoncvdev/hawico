@@ -1,5 +1,9 @@
 BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"; . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1"; . "$PSScriptRoot/../Modules/Invoke-HealthCheck.ps1" }
 Describe 'Invoke-HealthCheck' {
+ It 'sums empty or incomplete evidence without relying on Measure-Object Sum' {
+  (Get-HealthNumericSum -Items @() -PropertyName 'OccurrenceCount')|Should -Be 0
+  (Get-HealthNumericSum -Items @([pscustomobject]@{Other=4},[pscustomobject]@{OccurrenceCount=3}) -PropertyName 'OccurrenceCount')|Should -Be 3
+ }
  It 'orchestrates metrics findings score and the compatible report' {
   $input=[ordered]@{BaseInventory=[ordered]@{Computer=@{Hostname='PC1'}};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=2;CPU=@{AverageUsagePercent=92;PeakUsagePercent=95;SamplesAtOrAbove90Percent=80};Memory=@{AverageUsagePercent=20;PeakUsagePercent=30;MinimumAvailableMB=2048;SamplesAtOrAbove70Percent=0;SamplesAtOrAbove85Percent=0;SamplesAtOrAbove95Percent=0;SamplesBelow1024MB=0}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@();EventStatus='Collected';Sample=@{RequestedDurationSeconds=60;ActualDurationSeconds=60;IntervalSeconds=1;ValidSampleCount=2}}
   $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]'2026-01-01T00:00:00Z') -DurationMilliseconds 65000

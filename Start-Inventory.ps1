@@ -78,8 +78,16 @@ try {
 
             "3" {
                 $result = & $healthCollector -Mode Diagnostic
-                if ($null -ne $result -and $result.Success -and -not [string]::IsNullOrWhiteSpace($result.HtmlPath) -and (Test-Path -LiteralPath $result.HtmlPath)) {
-                    Start-Process -FilePath $result.HtmlPath
+                if ($null -ne $result -and $result.Success) {
+                    Write-Host ""
+                    Write-Host "Diagnóstico finalizado correctamente." -ForegroundColor Green
+                    if (-not [string]::IsNullOrWhiteSpace($result.JsonPath)) { Write-Host "JSON: $($result.JsonPath)" }
+                    if (-not [string]::IsNullOrWhiteSpace($result.LogPath)) { Write-Host "Log:  $($result.LogPath)" }
+                    if (-not [string]::IsNullOrWhiteSpace($result.HtmlPath) -and (Test-Path -LiteralPath $result.HtmlPath)) {
+                        Write-Host "HTML: $($result.HtmlPath)"
+                        Start-Process -FilePath $result.HtmlPath
+                    }
+                    else { Write-Host "El reporte HTML está deshabilitado o no fue generado." -ForegroundColor Yellow }
                 }
                 else { Write-Host "El diagnóstico de salud no pudo completarse." -ForegroundColor Red }
                 Wait-MenuInput

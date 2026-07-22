@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('Diagnostic')][string]$Mode = 'Diagnostic',
     [ValidateRange(10, 300)][Nullable[int]]$SampleDurationSeconds
@@ -47,7 +47,9 @@ $htmlPath = Join-Path $outputDir "$hostName-$stamp-health.html"
 $logPath = Join-Path $logDir "$hostName-$stamp-health.log"
 $collectionTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
+Write-Progress -Activity 'Windows Health Check' -Status 'Detectando capacidades' -PercentComplete 5
 $capabilityResult = Invoke-HealthCollectorSection -Name 'Capabilities' -DefaultData ([ordered]@{ IsAdministrator = $false; Items = @() }) -Operation { Get-HealthCapability }
+Write-Progress -Activity 'Windows Health Check' -Status 'Recopilando inventario base' -PercentComplete 15
 $computerResult = Invoke-HealthCollectorSection -Name 'Computer' -DefaultData ([ordered]@{ Computer = @{}; OperatingSystem = @{}; BIOS = @{}; Motherboard = @{} }) -Operation { Get-ComputerInventory }
 $processorResult = Invoke-HealthCollectorSection -Name 'Processors' -DefaultData @() -Operation { @(Get-ProcessorInventory) }
 $memoryResult = Invoke-HealthCollectorSection -Name 'MemoryInventory' -DefaultData @{} -Operation { Get-MemoryInventory }
@@ -57,14 +59,18 @@ $performanceResult = Invoke-HealthCollectorSection -Name 'Performance' -DefaultD
     $samples = @()
     $sampleCount = [math]::Ceiling($healthConfig.SampleDurationSeconds / $healthConfig.SampleIntervalSeconds)
     for ($index = 0; $index -lt $sampleCount; $index++) {
+        $samplePercent = 25 + [int][math]::Floor((($index + 1) / $sampleCount) * 50)
+        Write-Progress -Activity 'Windows Health Check' -Status "Muestreando CPU y memoria ($($index + 1)/$sampleCount)" -PercentComplete $samplePercent
         $samples += Get-PerformanceSample
         if ($index -lt ($sampleCount - 1)) { Start-Sleep -Seconds $healthConfig.SampleIntervalSeconds }
     }
     Measure-PerformanceHealth -Samples $samples -Thresholds $healthConfig
 }
+Write-Progress -Activity 'Windows Health Check' -Status 'Evaluando almacenamiento' -PercentComplete 80
 $storageResult = Invoke-HealthCollectorSection -Name 'Storage' -DefaultData ([ordered]@{ Status = 'Failed'; PhysicalDisks = @(); Volumes = @() }) -Operation {
     Get-StorageHealth -StorageInventory $storageInventoryResult.Data -SystemDrive $env:SystemDrive
 }
+Write-Progress -Activity 'Windows Health Check' -Status 'Consultando eventos críticos' -PercentComplete 90
 $eventResult = Invoke-HealthCollectorSection -Name 'Events' -DefaultData ([ordered]@{ Status = 'Failed'; Events = @(); ErrorCode = 'EVENT-QUERY-FAILED'; ErrorMessage = 'Event collection failed.' }) -Operation {
     Get-CriticalEventResult -LookbackDays $healthConfig.EventLookbackDays
 }
@@ -76,7 +82,7 @@ $inventorySection = [pscustomobject][ordered]@{
     Name = 'Inventory'
     Status = $inventoryStatus
     StartedAt = $inventorySections[0].StartedAt
-    DurationMilliseconds = [long](($inventorySections | Measure-Object -Property DurationMilliseconds -Sum).Sum)
+    DurationMilliseconds = [long](Get-HealthNumericSum -Items $inventorySections -PropertyName 'DurationMilliseconds')
     SampleCount = $null
     ErrorCode = if ($inventoryStatus -eq 'Partial') { 'INVENTORY-COLLECTION-PARTIAL' } else { $null }
     ErrorMessage = if ($inventoryStatus -eq 'Partial') { 'One or more base inventory providers failed.' } else { $null }
@@ -106,6 +112,7 @@ $inputData = [ordered]@{
         ValidSampleCount = [int]$performanceResult.Data.ValidSampleCount
     }
 }
+Write-Progress -Activity 'Windows Health Check' -Status 'Generando reporte' -PercentComplete 95
 $report = Invoke-HealthCheck -InputData $inputData -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds $collectionTimer.ElapsedMilliseconds
 
 $logLines = @(
@@ -126,6 +133,7 @@ if ($healthConfig.GenerateHTML) {
     New-HealthCheckHtml -Report $report -Path $htmlPath
     $htmlWritten = $true
 }
+Write-Progress -Activity 'Windows Health Check' -Completed
 return [ordered]@{
     Success = (-not $healthConfig.GenerateJSON -or $jsonWritten) -and (-not $healthConfig.GenerateHTML -or $htmlWritten)
     OutputDirectory = $outputDir
