@@ -207,6 +207,61 @@ function New-InventorySection {
 "@
 }
 
+
+function New-NetworkAdapterCards {
+    param(
+        [AllowNull()][object[]]$Adapters
+    )
+
+    $safeAdapters = @($Adapters)
+
+    if (($safeAdapters | Measure-Object).Count -eq 0) {
+        return '<div class="empty-state">No se encontraron adaptadores de red físicos.</div>'
+    }
+
+    $content = '<div class="network-grid">'
+
+    foreach ($adapter in $safeAdapters) {
+        $name = Get-InventoryPropertyValue -Object $adapter -PropertyName "InterfaceAlias"
+        $type = Get-InventoryPropertyValue -Object $adapter -PropertyName "AdapterType"
+        $status = Get-InventoryPropertyValue -Object $adapter -PropertyName "Status"
+        $isActive = Get-InventoryPropertyValue -Object $adapter -PropertyName "IsActive"
+        $description = Get-InventoryPropertyValue -Object $adapter -PropertyName "Description"
+
+        $statusClass = if ($isActive -eq $true -or $status -eq "Up") { "network-active" } else { "network-inactive" }
+        $statusText = if ($isActive -eq $true -or $status -eq "Up") { "Activa" } else { "Inactiva" }
+        $icon = if ($type -eq "Wi-Fi") { "Wi-Fi" } elseif ($type -eq "Ethernet") { "LAN" } else { "NIC" }
+
+        $content += @"
+<div class="network-card $statusClass">
+    <div class="network-card-head">
+        <div>
+            <div class="network-type">$(ConvertTo-HtmlSafe $icon)</div>
+            <div class="network-name">$(Get-InventoryDisplayValue -Value $name)</div>
+            <div class="network-description">$(Get-InventoryDisplayValue -Value $description)</div>
+        </div>
+        <span class="network-state">$(ConvertTo-HtmlSafe $statusText)</span>
+    </div>
+    <div class="network-details">
+$(New-InventoryMetric -Label "Tipo" -Value $type)
+$(New-InventoryMetric -Label "Estado del medio" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "MediaState"))
+$(New-InventoryMetric -Label "Dirección MAC" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "MACAddress"))
+$(New-InventoryMetric -Label "Velocidad de enlace" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "LinkSpeed"))
+$(New-InventoryMetric -Label "IPv4" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "IPv4Addresses"))
+$(New-InventoryMetric -Label "Gateway IPv4" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "IPv4Gateways"))
+$(New-InventoryMetric -Label "IPv6" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "IPv6Addresses"))
+$(New-InventoryMetric -Label "DNS" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "DNSServers"))
+$(New-InventoryMetric -Label "Controlador" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "DriverName"))
+$(New-InventoryMetric -Label "Versión del controlador" -Value (Get-InventoryPropertyValue -Object $adapter -PropertyName "DriverVersion"))
+    </div>
+</div>
+"@
+    }
+
+    $content += '</div>'
+    return $content
+}
+
 function New-InventoryHtml {
     param(
         [Parameter(Mandatory)][hashtable]$Inventory,
@@ -449,26 +504,42 @@ $(New-InventoryMetric -Label "Requiere verificación física" -Value $storage.Up
         -Content $storageContent `
         -Badge "$(@($storage.Physical).Count)"
 
-    $networkTable = New-InventoryTable `
-        -Rows @($Inventory.NetworkAdapters) `
-        -Columns ([ordered]@{
-            "Adaptador" = "InterfaceAlias"
-            "Descripción" = "Description"
-            "Estado" = "Status"
-            "MAC" = "MACAddress"
-            "Velocidad" = "LinkSpeed"
-            "IPv4" = "IPv4Addresses"
-            "Gateway IPv4" = "IPv4Gateways"
-            "IPv6" = "IPv6Addresses"
-            "DNS" = "DNSServers"
-        }) `
-        -EmptyMessage "No se encontraron adaptadores de red que cumplan los filtros."
+    $networkAdapters = @($Inventory.NetworkAdapters)
+    $activeNetworkAdapters = @($networkAdapters | Where-Object {
+        (Get-InventoryPropertyValue -Object $_ -PropertyName "IsActive") -eq $true -or
+        (Get-InventoryPropertyValue -Object $_ -PropertyName "Status") -eq "Up"
+    })
+    $inactiveNetworkAdapters = @($networkAdapters | Where-Object {
+        -not (
+            (Get-InventoryPropertyValue -Object $_ -PropertyName "IsActive") -eq $true -or
+            (Get-InventoryPropertyValue -Object $_ -PropertyName "Status") -eq "Up"
+        )
+    })
+
+    $networkSummary = @"
+<div class="grid dashboard-grid">
+$(New-InventoryMetric -Label "Adaptadores detectados" -Value $networkAdapters.Count)
+$(New-InventoryMetric -Label "Interfaces activas" -Value $activeNetworkAdapters.Count)
+$(New-InventoryMetric -Label "Interfaces inactivas" -Value $inactiveNetworkAdapters.Count)
+$(New-InventoryMetric -Label "Ethernet" -Value @($networkAdapters | Where-Object { (Get-InventoryPropertyValue -Object $_ -PropertyName "AdapterType") -eq "Ethernet" }).Count)
+$(New-InventoryMetric -Label "Wi-Fi" -Value @($networkAdapters | Where-Object { (Get-InventoryPropertyValue -Object $_ -PropertyName "AdapterType") -eq "Wi-Fi" }).Count)
+</div>
+"@
+
+    $networkCards = New-NetworkAdapterCards -Adapters $networkAdapters
+    $networkContent = @"
+$networkSummary
+<div class="subsection">
+    <h3>Interfaces físicas detectadas</h3>
+    $networkCards
+</div>
+"@
 
     $sections += New-InventorySection `
         -Title "Red" `
-        -Subtitle "Adaptadores, direcciones IP, gateways y DNS" `
-        -Content $networkTable `
-        -Badge "$(@($Inventory.NetworkAdapters).Count)"
+        -Subtitle "Todas las interfaces físicas, activas e inactivas" `
+        -Content $networkContent `
+        -Badge "$($networkAdapters.Count)"
 
     $graphicsTable = New-InventoryTable `
         -Rows @($Inventory.GraphicsAdapters) `
@@ -582,6 +653,58 @@ $(New-InventoryPropertyGrid -Object $secureBoot -Fields ([ordered]@{
         -Subtitle "TPM, Secure Boot y BitLocker" `
         -Content $securityContent `
         -Open $false
+
+    $peripherals = Get-InventoryPropertyValue -Object $Inventory -PropertyName "Peripherals"
+    $peripheralSummary = Get-InventoryPropertyValue -Object $peripherals -PropertyName "Summary"
+    $peripheralDevices = @(Get-InventoryPropertyValue -Object $peripherals -PropertyName "Devices")
+    $peripheralGroups = @($peripheralDevices | Group-Object Category | Sort-Object Name)
+
+    $peripheralTables = ""
+    foreach ($group in $peripheralGroups) {
+        $categoryTable = New-InventoryTable `
+            -Rows @($group.Group) `
+            -Columns ([ordered]@{
+                "Dispositivo" = "FriendlyName"
+                "Fabricante" = "Manufacturer"
+                "Conexión" = "ConnectionType"
+                "Estado" = "Status"
+                "Clase PnP" = "Class"
+                "Código de problema" = "ProblemCode"
+                "Identificador" = "InstanceId"
+            }) `
+            -EmptyMessage "No se encontraron dispositivos en esta categoría."
+
+        $peripheralTables += @"
+<div class="subsection">
+    <h3>$(ConvertTo-HtmlSafe $group.Name) <span class="badge">$($group.Count)</span></h3>
+    $categoryTable
+</div>
+"@
+    }
+
+    if ([string]::IsNullOrWhiteSpace($peripheralTables)) {
+        $peripheralTables = '<div class="empty-state">No se recopilaron periféricos en este modo.</div>'
+    }
+
+    $peripheralContent = @"
+<div class="grid dashboard-grid">
+$(New-InventoryMetric -Label "Periféricos detectados" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Total"))
+$(New-InventoryMetric -Label "Categorías" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Categories"))
+$(New-InventoryMetric -Label "Externos identificados" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "External"))
+$(New-InventoryMetric -Label "USB" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "USB"))
+$(New-InventoryMetric -Label "Bluetooth" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Bluetooth"))
+$(New-InventoryMetric -Label "Con problemas" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "WithProblems"))
+$(New-InventoryMetric -Label "Método de recopilación" -Value (Get-InventoryPropertyValue -Object $peripherals -PropertyName "CollectionMethod"))
+</div>
+$peripheralTables
+"@
+
+    $sections += New-InventorySection `
+        -Title "Periféricos conectados" `
+        -Subtitle "USB, Bluetooth, audio, cámaras, entrada, pantallas, impresoras y dispositivos especializados" `
+        -Content $peripheralContent `
+        -Open $false `
+        -Badge "$($peripheralDevices.Count)"
 
     $deviceErrorTable = New-InventoryTable `
         -Rows @($Inventory.DevicesWithErrors) `
@@ -808,6 +931,84 @@ button:hover {
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.dashboard-grid {
+    margin-bottom: 14px;
+}
+
+.network-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 12px;
+}
+
+.network-card {
+    border: 1px solid var(--border-soft);
+    border-left-width: 4px;
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.network-card.network-active {
+    border-left-color: var(--success);
+}
+
+.network-card.network-inactive {
+    border-left-color: #8a949e;
+}
+
+.network-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.network-type {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.network-name {
+    font-size: 16px;
+    font-weight: 650;
+    margin-top: 2px;
+}
+
+.network-description {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 3px;
+    max-width: 520px;
+}
+
+.network-state {
+    height: fit-content;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--neutral-soft);
+    color: #59636d;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.network-active .network-state {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.network-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 12px;
+}
+
 .item {
     background: var(--surface-soft);
     border: 1px solid var(--border-soft);
@@ -948,10 +1149,15 @@ tbody tr:hover {
     .grid {
         grid-template-columns: 1fr 1fr;
     }
+
+    .network-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 480px) {
-    .grid {
+    .grid,
+    .network-details {
         grid-template-columns: 1fr;
     }
 }

@@ -27,6 +27,7 @@ $moduleFiles = @(
     "Get-UpgradeInfo.ps1",
     "Get-SecurityInfo.ps1",
     "Get-DeviceErrors.ps1",
+    "Get-PeripheralInfo.ps1",
     "Export.ps1"
 )
 
@@ -72,6 +73,18 @@ try {
     $expansion = [ordered]@{ Slots = @(); Summary = @{} }
     $security = @{}
     $deviceErrors = @()
+    $peripherals = [ordered]@{
+        CollectionMethod = "No recopilado en modo rápido"
+        Devices = @()
+        Summary = [ordered]@{
+            Total = 0
+            Categories = 0
+            External = 0
+            USB = 0
+            Bluetooth = 0
+            WithProblems = 0
+        }
+    }
 
     if ($Mode -eq "Full") {
         Write-Progress -Activity "Inventario de hardware" -Status "Gráficos y expansión" -PercentComplete 75
@@ -84,10 +97,15 @@ try {
         if ([bool]$config.IncludeDeviceErrors) {
             $deviceErrors = Get-DeviceErrorInventory
         }
+
+        if ([bool]$config.IncludePeripherals) {
+            Write-Progress -Activity "Inventario de hardware" -Status "Periféricos conectados" -PercentComplete 94
+            $peripherals = Get-PeripheralInventory
+        }
     }
 
     $inventory = [ordered]@{
-        SchemaVersion = "2.0"
+        SchemaVersion = "2.1"
         Collection = [ordered]@{
             CollectedAt = (Get-Date).ToString("o")
             Mode = $Mode
@@ -104,6 +122,7 @@ try {
         GraphicsAdapters = $graphics
         Expansion = $expansion
         Security = $security
+        Peripherals = $peripherals
         DevicesWithErrors = $deviceErrors
     }
 
@@ -138,21 +157,25 @@ try {
     }
 }
 catch {
-    Write-Error ("No se pudo completar el inventario: {0}" -f $_.Exception.Message)
+    $errorFile = $_.InvocationInfo.ScriptName
+    $errorLine = $_.InvocationInfo.ScriptLineNumber
+
     Write-Host ""
     Write-Host "No se pudo completar el inventario." -ForegroundColor Red
-    Write-Host ("Mensaje: {0}" -f $_.Exception.Message) -ForegroundColor Red
-    Write-Host ("Posición: {0}" -f $_.InvocationInfo.PositionMessage) -ForegroundColor Yellow
-    Write-Host ("Stack trace: {0}" -f $_.ScriptStackTrace) -ForegroundColor DarkYellow
-    Write-Host ""
+    Write-Host ("Error: {0}" -f $_.Exception.Message) -ForegroundColor Red
+
+    if (-not [string]::IsNullOrWhiteSpace($errorFile)) {
+        Write-Host ("Archivo real: {0}" -f $errorFile) -ForegroundColor Yellow
+        Write-Host ("Línea real: {0}" -f $errorLine) -ForegroundColor Yellow
+    }
 
     return [ordered]@{
         Success = $false
         OutputDirectory = $outputDir
         LogPath = $logPath
         ErrorMessage = $_.Exception.Message
-        ErrorPosition = $_.InvocationInfo.PositionMessage
-        ErrorStackTrace = $_.ScriptStackTrace
+        ErrorFile = $errorFile
+        ErrorLine = $errorLine
     }
 }
 finally {
