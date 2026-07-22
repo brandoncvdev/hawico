@@ -27,6 +27,7 @@ $moduleFiles = @(
     "Get-UpgradeInfo.ps1",
     "Get-SecurityInfo.ps1",
     "Get-DeviceErrors.ps1",
+    "Get-PeripheralInfo.ps1",
     "Export.ps1"
 )
 
@@ -72,6 +73,18 @@ try {
     $expansion = [ordered]@{ Slots = @(); Summary = @{} }
     $security = @{}
     $deviceErrors = @()
+    $peripherals = [ordered]@{
+        CollectionMethod = "No recopilado en modo rápido"
+        Devices = @()
+        Summary = [ordered]@{
+            Total = 0
+            Categories = 0
+            External = 0
+            USB = 0
+            Bluetooth = 0
+            WithProblems = 0
+        }
+    }
 
     if ($Mode -eq "Full") {
         Write-Progress -Activity "Inventario de hardware" -Status "Gráficos y expansión" -PercentComplete 75
@@ -84,10 +97,15 @@ try {
         if ([bool]$config.IncludeDeviceErrors) {
             $deviceErrors = Get-DeviceErrorInventory
         }
+
+        if ([bool]$config.IncludePeripherals) {
+            Write-Progress -Activity "Inventario de hardware" -Status "Periféricos conectados" -PercentComplete 94
+            $peripherals = Get-PeripheralInventory
+        }
     }
 
     $inventory = [ordered]@{
-        SchemaVersion = "2.0"
+        SchemaVersion = "2.1"
         Collection = [ordered]@{
             CollectedAt = (Get-Date).ToString("o")
             Mode = $Mode
@@ -104,6 +122,7 @@ try {
         GraphicsAdapters = $graphics
         Expansion = $expansion
         Security = $security
+        Peripherals = $peripherals
         DevicesWithErrors = $deviceErrors
     }
 

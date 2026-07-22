@@ -654,6 +654,58 @@ $(New-InventoryPropertyGrid -Object $secureBoot -Fields ([ordered]@{
         -Content $securityContent `
         -Open $false
 
+    $peripherals = Get-InventoryPropertyValue -Object $Inventory -PropertyName "Peripherals"
+    $peripheralSummary = Get-InventoryPropertyValue -Object $peripherals -PropertyName "Summary"
+    $peripheralDevices = @(Get-InventoryPropertyValue -Object $peripherals -PropertyName "Devices")
+    $peripheralGroups = @($peripheralDevices | Group-Object Category | Sort-Object Name)
+
+    $peripheralTables = ""
+    foreach ($group in $peripheralGroups) {
+        $categoryTable = New-InventoryTable `
+            -Rows @($group.Group) `
+            -Columns ([ordered]@{
+                "Dispositivo" = "FriendlyName"
+                "Fabricante" = "Manufacturer"
+                "Conexión" = "ConnectionType"
+                "Estado" = "Status"
+                "Clase PnP" = "Class"
+                "Código de problema" = "ProblemCode"
+                "Identificador" = "InstanceId"
+            }) `
+            -EmptyMessage "No se encontraron dispositivos en esta categoría."
+
+        $peripheralTables += @"
+<div class="subsection">
+    <h3>$(ConvertTo-HtmlSafe $group.Name) <span class="badge">$($group.Count)</span></h3>
+    $categoryTable
+</div>
+"@
+    }
+
+    if ([string]::IsNullOrWhiteSpace($peripheralTables)) {
+        $peripheralTables = '<div class="empty-state">No se recopilaron periféricos en este modo.</div>'
+    }
+
+    $peripheralContent = @"
+<div class="grid dashboard-grid">
+$(New-InventoryMetric -Label "Periféricos detectados" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Total"))
+$(New-InventoryMetric -Label "Categorías" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Categories"))
+$(New-InventoryMetric -Label "Externos identificados" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "External"))
+$(New-InventoryMetric -Label "USB" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "USB"))
+$(New-InventoryMetric -Label "Bluetooth" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "Bluetooth"))
+$(New-InventoryMetric -Label "Con problemas" -Value (Get-InventoryPropertyValue -Object $peripheralSummary -PropertyName "WithProblems"))
+$(New-InventoryMetric -Label "Método de recopilación" -Value (Get-InventoryPropertyValue -Object $peripherals -PropertyName "CollectionMethod"))
+</div>
+$peripheralTables
+"@
+
+    $sections += New-InventorySection `
+        -Title "Periféricos conectados" `
+        -Subtitle "USB, Bluetooth, audio, cámaras, entrada, pantallas, impresoras y dispositivos especializados" `
+        -Content $peripheralContent `
+        -Open $false `
+        -Badge "$($peripheralDevices.Count)"
+
     $deviceErrorTable = New-InventoryTable `
         -Rows @($Inventory.DevicesWithErrors) `
         -Columns ([ordered]@{

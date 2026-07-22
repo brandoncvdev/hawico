@@ -17,7 +17,7 @@
 ## Modos
 
 - **Rápido:** equipo, Windows, CPU, RAM, red y almacenamiento.
-- **Completo:** agrega gráficos, expansión, TPM, Secure Boot, BitLocker y dispositivos con errores.
+- **Completo:** agrega gráficos, expansión, TPM, Secure Boot, BitLocker, periféricos conectados y dispositivos con errores.
 
 ## Configuración
 
@@ -78,3 +78,9 @@ También se mejoró el reporte de errores para mostrar el archivo y la línea re
 ## Network inventory
 
 The collector maps physical Ethernet and Wi-Fi adapters, including disconnected interfaces when `IncludeDisconnectedAdapters` is enabled. The HTML dashboard renders one card per adapter and distinguishes active and inactive interfaces.
+
+## Inventario de periféricos
+
+El modo completo recopila los dispositivos PnP presentes y genera áreas separadas para USB y docks, Bluetooth, audio, cámaras, teclados, mouse, controles HID, pantallas, impresoras, almacenamiento removible, puertos, biometría, tarjetas inteligentes y sensores.
+
+La opción `IncludePeripherals` de `config.json` permite desactivar esta recopilación. El collector excluye controladores host, hubs raíz y dispositivos virtuales conocidos para reducir duplicados y ruido, pero conserva el identificador PnP para diagnóstico.
