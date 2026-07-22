@@ -31,6 +31,17 @@ Describe 'Measure-PerformanceHealth' {
         $r = Measure-PerformanceHealth -Samples @($null,[pscustomobject]@{ CPUPercent=10; MemoryUsagePercent=20; AvailableMemoryMB=3000 })
         $r.Status | Should -Be 'Partial'
     }
+    It 'calculates persistence against configured memory thresholds' {
+        $thresholds = [pscustomobject]@{MemoryWarningPercent=60;MemoryHighPercent=75;MemoryCriticalPercent=90;MinimumAvailableMemoryMB=1500}
+        $r = Measure-PerformanceHealth -Samples @(
+            [pscustomobject]@{CPUPercent=10;MemoryUsagePercent=76;AvailableMemoryMB=1400},
+            [pscustomobject]@{CPUPercent=20;MemoryUsagePercent=92;AvailableMemoryMB=2000}
+        ) -Thresholds $thresholds
+        $r.Memory.WarningMatchingSamplePercent | Should -Be 100
+        $r.Memory.HighMatchingSamplePercent | Should -Be 100
+        $r.Memory.CriticalMatchingSamplePercent | Should -Be 50
+        $r.Memory.LowAvailableMatchingSamplePercent | Should -Be 50
+    }
 }
 Describe 'Get-PerformanceSample' {
  It 'maps Windows counter values into a sample' {

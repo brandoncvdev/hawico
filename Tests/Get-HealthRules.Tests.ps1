@@ -59,4 +59,13 @@ Describe 'Get-HealthFinding' {
   $recommendations.Count | Should -Be 1
   $recommendations[0].FindingIds | Should -Contain 'CPU-001'
  }
+ It 'applies validated configurable memory and disk thresholds' {
+  $thresholds = [pscustomobject]@{MemoryWarningPercent=60;MemoryHighPercent=75;MemoryCriticalPercent=90;MinimumAvailableMemoryMB=1500;CriticalFreeDiskPercent=5;MinimumFreeDiskPercent=15}
+  $metrics = [pscustomobject]@{Memory=[pscustomobject]@{UsagePercent=76;WarningMatchingSamplePercent=100;HighMatchingSamplePercent=80;CriticalMatchingSamplePercent=0;AvailableMemoryMB=1400;LowAvailableMatchingSamplePercent=80};Storage=[pscustomobject]@{SystemFreePercent=7}}
+  $ids = @((Get-HealthFinding -Metrics $metrics -Thresholds $thresholds).Id)
+  $ids | Should -Contain 'MEM-002'
+  $ids | Should -Contain 'MEM-004'
+  $ids | Should -Contain 'STO-003'
+  $ids | Should -Not -Contain 'STO-002'
+ }
 }

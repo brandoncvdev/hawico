@@ -60,7 +60,7 @@ $performanceResult = Invoke-HealthCollectorSection -Name 'Performance' -DefaultD
         $samples += Get-PerformanceSample
         if ($index -lt ($sampleCount - 1)) { Start-Sleep -Seconds $healthConfig.SampleIntervalSeconds }
     }
-    Measure-PerformanceHealth -Samples $samples
+    Measure-PerformanceHealth -Samples $samples -Thresholds $healthConfig
 }
 $storageResult = Invoke-HealthCollectorSection -Name 'Storage' -DefaultData ([ordered]@{ Status = 'Failed'; PhysicalDisks = @(); Volumes = @() }) -Operation {
     Get-StorageHealth -StorageInventory $storageInventoryResult.Data -SystemDrive $env:SystemDrive
@@ -93,6 +93,7 @@ $inputData = [ordered]@{
         Storage = $storageInventoryResult.Data
     }
     Capabilities = $capabilityResult.Data
+    HealthConfig = $healthConfig
     Performance = $performanceResult.Data
     Storage = $storageResult.Data
     Events = @($eventResult.Data.Events)

@@ -39,6 +39,7 @@ function Invoke-HealthCheck {
     $events = @($InputData.Events)
     $eventStatus = [string](Get-HealthInputValue -Object $InputData -Name 'EventStatus' -DefaultValue 'Collected')
     $capabilities = $InputData.Capabilities
+    $healthConfig = Get-HealthInputValue -Object $InputData -Name 'HealthConfig'
 
     $diskProviders = @('Disk', 'Ntfs', 'StorPort', 'stornvme')
     $diskEventCount = [int](($events | Where-Object { $_.Provider -in $diskProviders } | Measure-Object -Property OccurrenceCount -Sum).Sum)
@@ -71,6 +72,10 @@ function Invoke-HealthCheck {
             SamplesAtOrAbove85Percent = Get-HealthInputValue -Object $performance.Memory -Name 'SamplesAtOrAbove85Percent'
             SamplesAtOrAbove95Percent = Get-HealthInputValue -Object $performance.Memory -Name 'SamplesAtOrAbove95Percent'
             SamplesBelow1024MB = Get-HealthInputValue -Object $performance.Memory -Name 'SamplesBelow1024MB'
+            WarningMatchingSamplePercent = Get-HealthInputValue -Object $performance.Memory -Name 'WarningMatchingSamplePercent'
+            HighMatchingSamplePercent = Get-HealthInputValue -Object $performance.Memory -Name 'HighMatchingSamplePercent'
+            CriticalMatchingSamplePercent = Get-HealthInputValue -Object $performance.Memory -Name 'CriticalMatchingSamplePercent'
+            LowAvailableMatchingSamplePercent = Get-HealthInputValue -Object $performance.Memory -Name 'LowAvailableMatchingSamplePercent'
         }
         Storage = [pscustomobject][ordered]@{
             HealthStatus = $storageHealth
@@ -85,7 +90,7 @@ function Invoke-HealthCheck {
         }
     }
 
-    $findings = @(Get-HealthFinding -Metrics $metrics)
+    $findings = @(Get-HealthFinding -Metrics $metrics -Thresholds $healthConfig)
     $recommendations = @(Get-HealthRecommendation -Findings $findings)
     $performanceAvailable = $performance.Status -in @('Collected', 'Partial') -and [int]$performance.ValidSampleCount -gt 0
     $storageAvailable = $storage.Status -in @('Collected', 'Partial')

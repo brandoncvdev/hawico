@@ -1,5 +1,16 @@
+function Get-PerformanceThreshold {
+    param([AllowNull()][object]$Thresholds, [string]$Name, [double]$DefaultValue)
+    if ($null -eq $Thresholds) { return $DefaultValue }
+    if ($Thresholds -is [System.Collections.IDictionary] -and $Thresholds.Contains($Name)) { return [double]$Thresholds[$Name] }
+    if ($Thresholds.PSObject.Properties.Name -contains $Name) { return [double]$Thresholds.$Name }
+    return $DefaultValue
+}
+
 function Measure-PerformanceHealth {
-    param([Parameter(Mandatory)][AllowNull()][AllowEmptyCollection()][object[]]$Samples)
+    param(
+        [Parameter(Mandatory)][AllowNull()][AllowEmptyCollection()][object[]]$Samples,
+        [AllowNull()][object]$Thresholds
+    )
     $valid = @($Samples | Where-Object { $null -ne $_ -and $null -ne $_.CPUPercent -and $null -ne $_.MemoryUsagePercent -and $null -ne $_.AvailableMemoryMB })
     if ($valid.Count -eq 0) {
         return [ordered]@{ Status="Failed"; ValidSampleCount=0; CPU=@{}; Memory=@{} }
@@ -11,10 +22,18 @@ function Measure-PerformanceHealth {
     $memoryMeasure = $memory | Measure-Object -Average -Maximum
     $availableMeasure = $available | Measure-Object -Average -Minimum
     $highCpu = @($cpu | Where-Object { $_ -ge 90 }).Count
+    $warningThreshold = Get-PerformanceThreshold -Thresholds $Thresholds -Name 'MemoryWarningPercent' -DefaultValue 70
+    $highThreshold = Get-PerformanceThreshold -Thresholds $Thresholds -Name 'MemoryHighPercent' -DefaultValue 85
+    $criticalThreshold = Get-PerformanceThreshold -Thresholds $Thresholds -Name 'MemoryCriticalPercent' -DefaultValue 95
+    $availableThreshold = Get-PerformanceThreshold -Thresholds $Thresholds -Name 'MinimumAvailableMemoryMB' -DefaultValue 1024
     $memoryAt70 = @($memory | Where-Object { $_ -ge 70 }).Count
     $memoryAt85 = @($memory | Where-Object { $_ -ge 85 }).Count
     $memoryAt95 = @($memory | Where-Object { $_ -ge 95 }).Count
     $memoryBelow1024 = @($available | Where-Object { $_ -lt 1024 }).Count
+    $memoryWarning = @($memory | Where-Object { $_ -ge $warningThreshold }).Count
+    $memoryHigh = @($memory | Where-Object { $_ -ge $highThreshold }).Count
+    $memoryCritical = @($memory | Where-Object { $_ -ge $criticalThreshold }).Count
+    $memoryLowAvailable = @($available | Where-Object { $_ -lt $availableThreshold }).Count
     return [ordered]@{
         Status = if ($valid.Count -eq $Samples.Count) { "Collected" } else { "Partial" }
         ValidSampleCount = $valid.Count
@@ -32,6 +51,10 @@ function Measure-PerformanceHealth {
             SamplesAtOrAbove85Percent=[math]::Round(($memoryAt85/$valid.Count)*100,2)
             SamplesAtOrAbove95Percent=[math]::Round(($memoryAt95/$valid.Count)*100,2)
             SamplesBelow1024MB=[math]::Round(($memoryBelow1024/$valid.Count)*100,2)
+            WarningMatchingSamplePercent=[math]::Round(($memoryWarning/$valid.Count)*100,2)
+            HighMatchingSamplePercent=[math]::Round(($memoryHigh/$valid.Count)*100,2)
+            CriticalMatchingSamplePercent=[math]::Round(($memoryCritical/$valid.Count)*100,2)
+            LowAvailableMatchingSamplePercent=[math]::Round(($memoryLowAvailable/$valid.Count)*100,2)
         }
     }
 }

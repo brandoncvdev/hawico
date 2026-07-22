@@ -74,7 +74,9 @@ function Get-HealthScore {
 
 function Get-HealthMetricValue {
     param([AllowNull()][object]$Object,[string]$Name)
-    if($null -eq $Object -or $Object.PSObject.Properties.Name -notcontains $Name){return $null}
+    if($null -eq $Object){return $null}
+    if($Object -is [System.Collections.IDictionary] -and $Object.Contains($Name)){return $Object[$Name]}
+    if($Object.PSObject.Properties.Name -notcontains $Name){return $null}
     return $Object.$Name
 }
 function ConvertTo-HealthFindingRecord {
@@ -116,31 +118,45 @@ function Add-HealthFinding {
 }
 
 function Get-HealthFinding {
-    param([Parameter(Mandatory)][object]$Metrics)
+    param([Parameter(Mandatory)][object]$Metrics, [AllowNull()][object]$Thresholds)
     $findings = New-Object 'System.Collections.Generic.List[object]'
+    $memoryWarning = Get-HealthMetricValue -Object $Thresholds -Name 'MemoryWarningPercent'
+    $memoryHigh = Get-HealthMetricValue -Object $Thresholds -Name 'MemoryHighPercent'
+    $memoryCritical = Get-HealthMetricValue -Object $Thresholds -Name 'MemoryCriticalPercent'
+    $minimumAvailable = Get-HealthMetricValue -Object $Thresholds -Name 'MinimumAvailableMemoryMB'
+    $criticalFree = Get-HealthMetricValue -Object $Thresholds -Name 'CriticalFreeDiskPercent'
+    $minimumFree = Get-HealthMetricValue -Object $Thresholds -Name 'MinimumFreeDiskPercent'
+    if ($null -eq $memoryWarning) { $memoryWarning = 70 }
+    if ($null -eq $memoryHigh) { $memoryHigh = 85 }
+    if ($null -eq $memoryCritical) { $memoryCritical = 95 }
+    if ($null -eq $minimumAvailable) { $minimumAvailable = 1024 }
+    if ($null -eq $criticalFree) { $criticalFree = 10 }
+    if ($null -eq $minimumFree) { $minimumFree = 20 }
     $memory = Get-HealthMetricValue -Object $Metrics -Name 'Memory'
     if ($null -ne $memory) {
         $usage = Get-HealthMetricValue -Object $memory -Name 'UsagePercent'
         $legacyMatching = Get-HealthMetricValue -Object $memory -Name 'MatchingSamplePercent'
         if ($null -ne $usage) {
             $memoryRule = $null
-            if ($usage -ge 95) { $memoryRule = @('MEM-001', 'Critical', 25, 'SamplesAtOrAbove95Percent', 'Critical sustained memory utilization') }
-            elseif ($usage -ge 85) { $memoryRule = @('MEM-002', 'High', 15, 'SamplesAtOrAbove85Percent', 'High sustained memory utilization') }
-            elseif ($usage -ge 70) { $memoryRule = @('MEM-003', 'Medium', 8, 'SamplesAtOrAbove70Percent', 'Elevated sustained memory utilization') }
+            if ($usage -ge $memoryCritical) { $memoryRule = @('MEM-001', 'Critical', 25, 'CriticalMatchingSamplePercent', 'SamplesAtOrAbove95Percent', 'Critical sustained memory utilization') }
+            elseif ($usage -ge $memoryHigh) { $memoryRule = @('MEM-002', 'High', 15, 'HighMatchingSamplePercent', 'SamplesAtOrAbove85Percent', 'High sustained memory utilization') }
+            elseif ($usage -ge $memoryWarning) { $memoryRule = @('MEM-003', 'Medium', 8, 'WarningMatchingSamplePercent', 'SamplesAtOrAbove70Percent', 'Elevated sustained memory utilization') }
             if ($null -ne $memoryRule) {
                 $matching = Get-HealthMetricValue -Object $memory -Name $memoryRule[3]
+                if ($null -eq $matching) { $matching = Get-HealthMetricValue -Object $memory -Name $memoryRule[4] }
                 if ($null -eq $matching) { $matching = $legacyMatching }
                 if ($matching -ge 80) {
                     $evidence = [ordered]@{ AverageUsagePercent = $usage; PeakUsagePercent = Get-HealthMetricValue -Object $memory -Name 'PeakUsagePercent'; MatchingSamplePercent = $matching }
-                    Add-HealthFinding -List $findings -Id $memoryRule[0] -Category 'Memory' -Severity $memoryRule[1] -Title $memoryRule[4] -Description 'Memory utilization met the rule threshold during at least 80 percent of valid samples.' -Evidence $evidence -RecommendationId 'REC-MEM-001' -Impact $memoryRule[2]
+                    Add-HealthFinding -List $findings -Id $memoryRule[0] -Category 'Memory' -Severity $memoryRule[1] -Title $memoryRule[5] -Description 'Memory utilization met the configured rule threshold during at least 80 percent of valid samples.' -Evidence $evidence -RecommendationId 'REC-MEM-001' -Impact $memoryRule[2]
                 }
             }
         }
         $available = Get-HealthMetricValue -Object $memory -Name 'AvailableMemoryMB'
-        $availableMatching = Get-HealthMetricValue -Object $memory -Name 'SamplesBelow1024MB'
+        $availableMatching = Get-HealthMetricValue -Object $memory -Name 'LowAvailableMatchingSamplePercent'
+        if ($null -eq $availableMatching) { $availableMatching = Get-HealthMetricValue -Object $memory -Name 'SamplesBelow1024MB' }
         if ($null -eq $availableMatching) { $availableMatching = $legacyMatching }
-        if ($null -ne $available -and $available -lt 1024 -and $availableMatching -ge 80) {
-            Add-HealthFinding -List $findings -Id 'MEM-004' -Category 'Memory' -Severity 'High' -Title 'Sustained low available memory' -Description 'Available memory remained below 1024 MB during at least 80 percent of valid samples.' -Evidence ([ordered]@{ MinimumAvailableMB = $available; MatchingSamplePercent = $availableMatching }) -RecommendationId 'REC-MEM-001' -Impact 10
+        if ($null -ne $available -and $available -lt $minimumAvailable -and $availableMatching -ge 80) {
+            Add-HealthFinding -List $findings -Id 'MEM-004' -Category 'Memory' -Severity 'High' -Title 'Sustained low available memory' -Description 'Available memory remained below the configured minimum during at least 80 percent of valid samples.' -Evidence ([ordered]@{ MinimumAvailableMB = $available; MatchingSamplePercent = $availableMatching; ConfiguredMinimumAvailableMB = $minimumAvailable }) -RecommendationId 'REC-MEM-001' -Impact 10
         }
     }
     $storage = Get-HealthMetricValue -Object $Metrics -Name 'Storage'
@@ -150,11 +166,11 @@ function Get-HealthFinding {
         if ($null -ne $health -and $health -ne 'Unknown' -and $health -ne 'Healthy') {
             Add-HealthFinding -List $findings -Id 'STO-001' -Category 'Storage' -Severity 'Critical' -Title 'Storage health is degraded' -Description 'Windows reported an explicit non-healthy state for a physical disk.' -Evidence ([ordered]@{ HealthStatus = $health }) -RecommendationId 'REC-STO-001' -Impact 35
         }
-        if ($null -ne $free -and $free -lt 10) {
-            Add-HealthFinding -List $findings -Id 'STO-002' -Category 'Storage' -Severity 'Critical' -Title 'Critical system volume free space' -Description 'The operating-system volume has less than 10 percent free space.' -Evidence ([ordered]@{ SystemFreePercent = $free }) -RecommendationId 'REC-STO-002' -Impact 20
+        if ($null -ne $free -and $free -lt $criticalFree) {
+            Add-HealthFinding -List $findings -Id 'STO-002' -Category 'Storage' -Severity 'Critical' -Title 'Critical system volume free space' -Description 'The operating-system volume is below the configured critical free-space threshold.' -Evidence ([ordered]@{ SystemFreePercent = $free; ConfiguredCriticalPercent = $criticalFree }) -RecommendationId 'REC-STO-002' -Impact 20
         }
-        elseif ($null -ne $free -and $free -lt 20) {
-            Add-HealthFinding -List $findings -Id 'STO-003' -Category 'Storage' -Severity 'High' -Title 'Low system volume free space' -Description 'The operating-system volume has between 10 and 20 percent free space.' -Evidence ([ordered]@{ SystemFreePercent = $free }) -RecommendationId 'REC-STO-002' -Impact 10
+        elseif ($null -ne $free -and $free -lt $minimumFree) {
+            Add-HealthFinding -List $findings -Id 'STO-003' -Category 'Storage' -Severity 'High' -Title 'Low system volume free space' -Description 'The operating-system volume is below the configured minimum free-space threshold.' -Evidence ([ordered]@{ SystemFreePercent = $free; ConfiguredMinimumPercent = $minimumFree }) -RecommendationId 'REC-STO-002' -Impact 10
         }
         if ((Get-HealthMetricValue -Object $storage -Name 'SystemMediaType') -eq 'HDD') {
             Add-HealthFinding -List $findings -Id 'STO-004' -Category 'Storage' -Severity 'Medium' -Title 'System volume uses rotational storage' -Description 'The operating-system disk was identified as an HDD.' -Evidence ([ordered]@{ SystemMediaType = 'HDD' }) -RecommendationId 'REC-STO-003' -Impact 5
