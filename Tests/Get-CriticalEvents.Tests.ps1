@@ -17,6 +17,30 @@ Describe 'Group-CriticalEvent' {
  It 'returns an empty collection for no evidence' { @(Group-CriticalEvent -Events @()).Count|Should -Be 0 }
 }
 Describe 'Get-CriticalEvent' {
- It 'queries and groups Windows events' { Mock Get-WinEvent { @([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='error 1'}) };(Get-CriticalEvent -LookbackDays 7)[0].OccurrenceCount|Should -Be 1 }
+ It 'queries and groups Windows events' { Mock Get-WinEvent { if($FilterHashtable.ProviderName -eq 'Disk'){@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='error 1'})}else{@()} };(Get-CriticalEvent -LookbackDays 7)[0].OccurrenceCount|Should -Be 1 }
  It 'returns empty evidence when the provider fails' { Mock Get-WinEvent { throw 'denied' };@(Get-CriticalEvent -LookbackDays 7).Count|Should -Be 0 }
+ It 'keeps successful providers when another provider fails' {
+  Mock Get-WinEvent {
+   if ($FilterHashtable.ProviderName -eq 'Disk') { throw 'provider unavailable' }
+   if ($FilterHashtable.ProviderName -eq 'WHEA-Logger') { return @([pscustomobject]@{ProviderName='WHEA-Logger';Id=1;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='hardware 1'}) }
+   return @()
+  }
+  $result = Get-CriticalEventResult -LookbackDays 7
+  $result.Status | Should -Be 'Partial'
+  $result.Events.Provider | Should -Contain 'WHEA-Logger'
+  $result.Errors.Provider | Should -Contain 'Disk'
+ }
+ It 'reports failed rather than an empty healthy result when every provider fails' {
+  Mock Get-WinEvent { throw 'denied' }
+  $result = Get-CriticalEventResult -LookbackDays 7
+  $result.Status | Should -Be 'Failed'
+  $result.Events | Should -BeNullOrEmpty
+  $result.ErrorCode | Should -Be 'EVENT-QUERY-FAILED'
+ }
+ It 'queries providers only in their applicable Windows log' {
+  Mock Get-WinEvent { return @() }
+  Get-CriticalEventResult -LookbackDays 7 | Out-Null
+  Should -Invoke -CommandName Get-WinEvent -ParameterFilter { $FilterHashtable.ProviderName -eq 'Disk' -and $FilterHashtable.LogName -eq 'System' }
+  Should -Invoke -CommandName Get-WinEvent -ParameterFilter { $FilterHashtable.ProviderName -eq 'Application Error' -and $FilterHashtable.LogName -eq 'Application' }
+ }
 }

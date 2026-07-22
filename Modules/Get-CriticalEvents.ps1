@@ -16,9 +16,42 @@ function Group-CriticalEvent {
 }
 function Get-CriticalEvent {
  param([ValidateRange(1,30)][int]$LookbackDays=7)
- try {
-  $providers=@('Disk','Ntfs','StorPort','stornvme','WHEA-Logger','Kernel-Power','Application Error','Application Hang')
-  $raw=@(Get-WinEvent -FilterHashtable @{LogName=@('System','Application');ProviderName=$providers;StartTime=(Get-Date).AddDays(-$LookbackDays)} -ErrorAction Stop)
-  return @(Group-CriticalEvent -Events $raw)
- }catch{return @()}
+ return @((Get-CriticalEventResult -LookbackDays $LookbackDays).Events)
+}
+
+function Get-CriticalEventResult {
+ param([ValidateRange(1,30)][int]$LookbackDays=7)
+ $startedAt=[datetimeoffset]::Now
+ $timer=[System.Diagnostics.Stopwatch]::StartNew()
+ $definitions=@(
+  [pscustomobject]@{Provider='Disk';LogName='System'},
+  [pscustomobject]@{Provider='Ntfs';LogName='System'},
+  [pscustomobject]@{Provider='StorPort';LogName='System'},
+  [pscustomobject]@{Provider='stornvme';LogName='System'},
+  [pscustomobject]@{Provider='WHEA-Logger';LogName='System'},
+  [pscustomobject]@{Provider='Kernel-Power';LogName='System'},
+  [pscustomobject]@{Provider='Application Error';LogName='Application'},
+  [pscustomobject]@{Provider='Application Hang';LogName='Application'}
+ )
+ $raw=@()
+ $errors=@()
+ foreach($definition in $definitions){
+  try{
+   $raw+=@(Get-WinEvent -FilterHashtable @{LogName=$definition.LogName;ProviderName=$definition.Provider;StartTime=(Get-Date).AddDays(-$LookbackDays)} -ErrorAction Stop)
+  }
+  catch{
+   $errors+=[pscustomobject][ordered]@{Provider=$definition.Provider;LogName=$definition.LogName;Code='EVENT-PROVIDER-FAILED';Message='The event provider could not be queried.'}
+  }
+ }
+ $timer.Stop()
+ $status=if($errors.Count-eq 0){'Collected'}elseif($errors.Count-lt $definitions.Count){'Partial'}else{'Failed'}
+ return [ordered]@{
+  Status=$status
+  StartedAt=$startedAt
+  DurationMilliseconds=$timer.ElapsedMilliseconds
+  ErrorCode=if($status-eq'Failed'){'EVENT-QUERY-FAILED'}elseif($status-eq'Partial'){'EVENT-QUERY-PARTIAL'}else{$null}
+  ErrorMessage=if($status-eq'Failed'){'No configured event provider could be queried.'}elseif($status-eq'Partial'){'One or more configured event providers could not be queried.'}else{$null}
+  Events=@(Group-CriticalEvent -Events $raw)
+  Errors=$errors
+ }
 }
