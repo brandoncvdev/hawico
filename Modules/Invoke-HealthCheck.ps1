@@ -116,6 +116,7 @@ function Invoke-HealthCheck {
         ConvertTo-HealthSectionRecord -Name 'Storage' -Status $storage.Status -Source $storageSection -SampleCount $null
         ConvertTo-HealthSectionRecord -Name 'Events' -Status $eventStatus -Source $eventSection -SampleCount $events.Count
     )
+    $sections += @($providedSections | Where-Object { $_.Name -notin @('Performance', 'Storage', 'Events') })
 
     $errors = @()
     $isAdministrator = [bool](Get-HealthInputValue -Object $capabilities -Name 'IsAdministrator' -DefaultValue $false)
