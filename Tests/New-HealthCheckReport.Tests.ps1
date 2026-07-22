@@ -6,7 +6,7 @@ Describe 'ConvertTo-HealthCheckReport' {
   $r.SchemaVersion|Should -Be '2.0'
   $r.Collection.Type|Should -Be 'WindowsHealthCheck'
   $r.Collection.Mode|Should -Be 'Diagnostic'
-  $r.HealthCheck.ContractVersion|Should -Be '1.0'
+  $r.HealthCheck.ContractVersion|Should -Be '1.1'
   $r.Computer.Hostname|Should -Be 'PC1'
  }
  It 'redacts the script user by default' {

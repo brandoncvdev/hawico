@@ -51,6 +51,7 @@ function Invoke-HealthCheck {
     $storage = $InputData.Storage
     $events = @($InputData.Events)
     $eventStatus = [string](Get-HealthInputValue -Object $InputData -Name 'EventStatus' -DefaultValue 'Collected')
+    $eventErrors = @(Get-HealthInputValue -Object $InputData -Name 'EventErrors' -DefaultValue @())
     $capabilities = $InputData.Capabilities
     $healthConfig = Get-HealthInputValue -Object $InputData -Name 'HealthConfig'
 
@@ -125,9 +126,9 @@ function Invoke-HealthCheck {
     $score = Get-HealthScore -Categories $categories
 
     $providedSections = @(Get-HealthInputValue -Object $InputData -Name 'Sections' -DefaultValue @())
-    $performanceSection = @($providedSections | Where-Object Name -eq 'Performance' | Select-Object -First 1)
-    $storageSection = @($providedSections | Where-Object Name -eq 'Storage' | Select-Object -First 1)
-    $eventSection = @($providedSections | Where-Object Name -eq 'Events' | Select-Object -First 1)
+    $performanceSection = $providedSections | Where-Object Name -eq 'Performance' | Select-Object -First 1
+    $storageSection = $providedSections | Where-Object Name -eq 'Storage' | Select-Object -First 1
+    $eventSection = $providedSections | Where-Object Name -eq 'Events' | Select-Object -First 1
     $sections = @(
         ConvertTo-HealthSectionRecord -Name 'Performance' -Status $performance.Status -Source $performanceSection -SampleCount $performance.ValidSampleCount
         ConvertTo-HealthSectionRecord -Name 'Storage' -Status $storage.Status -Source $storageSection -SampleCount $null
@@ -145,6 +146,14 @@ function Invoke-HealthCheck {
             Code = if ([string]::IsNullOrWhiteSpace($section.ErrorCode)) { 'SECTION-' + $section.Status.ToUpperInvariant() } else { $section.ErrorCode }
             Section = $section.Name
             Message = if ([string]::IsNullOrWhiteSpace($section.ErrorMessage)) { $section.Name + ' collection status is ' + $section.Status + '.' } else { $section.ErrorMessage }
+        }
+    }
+    foreach ($eventError in $eventErrors) {
+        $errors += [pscustomobject][ordered]@{
+            Code = Get-HealthInputValue -Object $eventError -Name 'Code' -DefaultValue 'EVENT-PROVIDER-FAILED'
+            Section = 'Events'
+            Provider = Get-HealthInputValue -Object $eventError -Name 'Provider'
+            Message = Get-HealthInputValue -Object $eventError -Name 'Message' -DefaultValue 'The event provider could not be queried.'
         }
     }
 

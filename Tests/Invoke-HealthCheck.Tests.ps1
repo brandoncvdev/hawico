@@ -37,4 +37,12 @@ Describe 'Invoke-HealthCheck' {
   $r.HealthCheck.Score.ConfidencePercent|Should -Be 35
   $r.HealthCheck.Score.Value|Should -BeNullOrEmpty
  }
+ It 'preserves partial section detail and provider errors in the report' {
+  $inputData=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@();EventStatus='Partial';Sections=@([pscustomobject]@{Name='Events';Status='Partial';StartedAt='2026-01-01T00:00:00Z';DurationMilliseconds=12;ErrorCode='EVENT-QUERY-PARTIAL';ErrorMessage='Unavailable providers: WHEA-Logger.'});EventErrors=@([pscustomobject]@{Provider='WHEA-Logger';Code='EVENT-PROVIDER-FAILED';Message='Provider unavailable.'})}
+  $r=Invoke-HealthCheck -InputData $inputData -CollectedAt ([datetimeoffset]::Now)
+  $section=$r.HealthCheck.Sections|Where-Object Name -eq 'Events'
+  $section.ErrorMessage|Should -Match 'WHEA-Logger'
+  $section.DurationMilliseconds|Should -Be 12
+  ($r.HealthCheck.Errors|Where-Object Provider -eq 'WHEA-Logger').Code|Should -Be 'EVENT-PROVIDER-FAILED'
+ }
 }

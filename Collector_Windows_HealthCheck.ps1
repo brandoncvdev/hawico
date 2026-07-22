@@ -104,6 +104,7 @@ $inputData = [ordered]@{
     Storage = $storageResult.Data
     Events = @($eventResult.Data.Events)
     EventStatus = $eventResult.Section.Status
+    EventErrors = @($eventResult.Data.Errors)
     Sections = @($inventorySection, $capabilityResult.Section, $performanceResult.Section, $storageResult.Section, $eventResult.Section)
     Sample = [ordered]@{
         RequestedDurationSeconds = $healthConfig.SampleDurationSeconds

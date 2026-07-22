@@ -18,7 +18,7 @@ Describe 'Windows health collector integration' -Tag 'Integration' -Skip:(-not $
         $report = Get-Content -LiteralPath $result.JsonPath -Raw | ConvertFrom-Json
         $report.SchemaVersion | Should -Be '2.0'
         $report.Collection.Type | Should -Be 'WindowsHealthCheck'
-        $report.HealthCheck.ContractVersion | Should -Be '1.0'
+        $report.HealthCheck.ContractVersion | Should -Be '1.1'
         $report.HealthCheck.Status | Should -BeIn @('Completed', 'Partial')
         $report.HealthCheck.Sections.Name | Should -Contain 'Performance'
         $report.HealthCheck.Sections.Name | Should -Contain 'Storage'

@@ -29,24 +29,29 @@ function Get-CriticalEventResult {
  $startedAt=[datetimeoffset]::Now
  $timer=[System.Diagnostics.Stopwatch]::StartNew()
  $definitions=@(
-  [pscustomobject]@{Provider='Disk';LogName='System'},
-  [pscustomobject]@{Provider='Ntfs';LogName='System'},
-  [pscustomobject]@{Provider='StorPort';LogName='System'},
-  [pscustomobject]@{Provider='stornvme';LogName='System'},
-  [pscustomobject]@{Provider='WHEA-Logger';LogName='System'},
-  [pscustomobject]@{Provider='Kernel-Power';LogName='System'},
-  [pscustomobject]@{Provider='Application Error';LogName='Application'},
-  [pscustomobject]@{Provider='Application Hang';LogName='Application'}
+  [pscustomobject]@{Provider='Disk';Candidates=@('Disk','Microsoft-Windows-Disk');LogName='System'},
+  [pscustomobject]@{Provider='Ntfs';Candidates=@('Ntfs','Microsoft-Windows-Ntfs');LogName='System'},
+  [pscustomobject]@{Provider='StorPort';Candidates=@('Microsoft-Windows-StorPort','StorPort');LogName='System'},
+  [pscustomobject]@{Provider='stornvme';Candidates=@('stornvme','Microsoft-Windows-Stornvme');LogName='System'},
+  [pscustomobject]@{Provider='WHEA-Logger';Candidates=@('Microsoft-Windows-WHEA-Logger','WHEA-Logger');LogName='System'},
+  [pscustomobject]@{Provider='Kernel-Power';Candidates=@('Microsoft-Windows-Kernel-Power','Kernel-Power');LogName='System'},
+  [pscustomobject]@{Provider='Application Error';Candidates=@('Application Error');LogName='Application'},
+  [pscustomobject]@{Provider='Application Hang';Candidates=@('Application Hang');LogName='Application'}
  )
  $raw=@()
  $errors=@()
  foreach($definition in $definitions){
-  try{
-   $raw+=@(Get-WinEvent -FilterHashtable @{LogName=$definition.LogName;ProviderName=$definition.Provider;StartTime=(Get-Date).AddDays(-$LookbackDays)} -ErrorAction Stop)
+  $queried=$false
+  foreach($candidate in $definition.Candidates){
+   try{
+    $providerEvents=@(Get-WinEvent -FilterHashtable @{LogName=$definition.LogName;ProviderName=$candidate;StartTime=(Get-Date).AddDays(-$LookbackDays)} -ErrorAction Stop)
+    $raw+=@($providerEvents|ForEach-Object{[pscustomobject]@{ProviderName=$definition.Provider;Id=$_.Id;LevelDisplayName=$_.LevelDisplayName;TimeCreated=$_.TimeCreated;Message=$_.Message}})
+    $queried=$true
+    break
+   }
+   catch{Write-Verbose ("Event provider alias unavailable: {0}" -f $candidate)}
   }
-  catch{
-   $errors+=[pscustomobject][ordered]@{Provider=$definition.Provider;LogName=$definition.LogName;Code='EVENT-PROVIDER-FAILED';Message='The event provider could not be queried.'}
-  }
+  if(-not$queried){$errors+=[pscustomobject][ordered]@{Provider=$definition.Provider;LogName=$definition.LogName;Code='EVENT-PROVIDER-FAILED';Message='The event provider could not be queried.';AttemptedProviders=@($definition.Candidates)}}
  }
  $timer.Stop()
  $status=if($errors.Count-eq 0){'Collected'}elseif($errors.Count-lt $definitions.Count){'Partial'}else{'Failed'}
@@ -55,7 +60,7 @@ function Get-CriticalEventResult {
   StartedAt=$startedAt
   DurationMilliseconds=$timer.ElapsedMilliseconds
   ErrorCode=if($status-eq'Failed'){'EVENT-QUERY-FAILED'}elseif($status-eq'Partial'){'EVENT-QUERY-PARTIAL'}else{$null}
-  ErrorMessage=if($status-eq'Failed'){'No configured event provider could be queried.'}elseif($status-eq'Partial'){'One or more configured event providers could not be queried.'}else{$null}
+  ErrorMessage=if($status-eq'Failed'){'No configured event provider could be queried: '+(@($errors.Provider)-join', ')+'.'}elseif($status-eq'Partial'){'Unavailable event providers: '+(@($errors.Provider)-join', ')+'.'}else{$null}
   Events=@(Group-CriticalEvent -Events $raw)
   Errors=$errors
  }

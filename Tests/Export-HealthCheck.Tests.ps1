@@ -8,6 +8,8 @@ Describe 'New-HealthCheckHtml' {
   $html|Should -Match 'REC-MEM-001';$html|Should -Match 'MEM-002'
   $html|Should -Match 'C:';$html|Should -Match 'Application Error'
   $html|Should -Match 'Some providers unavailable';$html|Should -Match '2026-01-01'
+  $html|Should -Match 'Cobertura del score'
+  $html|Should -Match 'completitud de la recolección'
  }
  It 'renders unavailable performance metrics without throwing under StrictMode' {
   $path=Join-Path $TestDrive 'partial.html';$r=[ordered]@{Computer=@{};Collection=@{CollectedAt='2026-01-01'};HealthCheck=@{Status='Partial';Score=@{Value=$null;Status='InsufficientData';ConfidencePercent=35};PrimaryBottleneck='None';Findings=@();Metrics=@{CPU=@{};Memory=@{};Storage=@{PhysicalDisks=@();Volumes=@()};Events=@()};Recommendations=@();Sections=@(@{Name='Performance';Status='Failed';ErrorMessage='No valid samples'})}}

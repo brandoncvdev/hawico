@@ -378,7 +378,7 @@ Los consumidores actuales deben poder ignorar propiedades nuevas. La forma de
   "Memory": {},
   "Storage": {},
   "HealthCheck": {
-    "ContractVersion": "1.0",
+    "ContractVersion": "1.1",
     "Status": "Completed",
     "IsAdministrator": true,
     "Capabilities": [],
@@ -698,6 +698,11 @@ exclusivamente del estado de la máquina que ejecuta las pruebas.
 - Tiene pruebas deterministas para límites, scoring y fallos parciales.
 
 ## 18. Evolución del contrato
+
+- `HealthCheck.ContractVersion 1.1` agrega detalle aditivo de proveedores de eventos
+  fallidos, aliases canónicos para proveedores modernos de Windows y una
+  explicación visual de la diferencia entre completitud y cobertura del score.
+- `ScoringVersion 1.0` y sus reglas permanecen sin cambios.
 
 - Cambios aditivos en `HealthCheck` incrementan su versión menor.
 - Cambios incompatibles incrementan `HealthCheck.ContractVersion` mayor.

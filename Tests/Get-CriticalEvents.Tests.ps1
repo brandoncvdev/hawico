@@ -27,14 +27,26 @@ Describe 'Get-CriticalEvent' {
  It 'returns empty evidence when the provider fails' { Mock Get-WinEvent { throw 'denied' };@(Get-CriticalEvent -LookbackDays 7).Count|Should -Be 0 }
  It 'keeps successful providers when another provider fails' {
   Mock Get-WinEvent {
-   if ($FilterHashtable.ProviderName -eq 'Disk') { throw 'provider unavailable' }
-   if ($FilterHashtable.ProviderName -eq 'WHEA-Logger') { return @([pscustomobject]@{ProviderName='WHEA-Logger';Id=1;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='hardware 1'}) }
+   if ($FilterHashtable.ProviderName -in @('Disk','Microsoft-Windows-Disk')) { throw 'provider unavailable' }
+   if ($FilterHashtable.ProviderName -eq 'Microsoft-Windows-WHEA-Logger') { return @([pscustomobject]@{ProviderName='Microsoft-Windows-WHEA-Logger';Id=1;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='hardware 1'}) }
    return @()
   }
   $result = Get-CriticalEventResult -LookbackDays 7
   $result.Status | Should -Be 'Partial'
   $result.Events.Provider | Should -Contain 'WHEA-Logger'
   $result.Errors.Provider | Should -Contain 'Disk'
+  $result.ErrorMessage | Should -Match 'Disk'
+ }
+ It 'falls back to modern Windows provider aliases and emits canonical names' {
+  Mock Get-WinEvent {
+   if($FilterHashtable.ProviderName -eq 'Ntfs'){throw 'legacy provider absent'}
+   if($FilterHashtable.ProviderName -eq 'Microsoft-Windows-Ntfs'){return @([pscustomobject]@{ProviderName='Microsoft-Windows-Ntfs';Id=55;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='ntfs 1'})}
+   return @()
+  }
+  $result=Get-CriticalEventResult -LookbackDays 7
+  $result.Events.Provider|Should -Contain 'Ntfs'
+  Should -Invoke -CommandName Get-WinEvent -ParameterFilter {$FilterHashtable.ProviderName -eq 'Microsoft-Windows-WHEA-Logger'}
+  Should -Invoke -CommandName Get-WinEvent -ParameterFilter {$FilterHashtable.ProviderName -eq 'Microsoft-Windows-Kernel-Power'}
  }
  It 'reports failed rather than an empty healthy result when every provider fails' {
   Mock Get-WinEvent { throw 'denied' }
