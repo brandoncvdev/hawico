@@ -11,6 +11,10 @@ function Measure-PerformanceHealth {
     $memoryMeasure = $memory | Measure-Object -Average -Maximum
     $availableMeasure = $available | Measure-Object -Average -Minimum
     $highCpu = @($cpu | Where-Object { $_ -ge 90 }).Count
+    $memoryAt70 = @($memory | Where-Object { $_ -ge 70 }).Count
+    $memoryAt85 = @($memory | Where-Object { $_ -ge 85 }).Count
+    $memoryAt95 = @($memory | Where-Object { $_ -ge 95 }).Count
+    $memoryBelow1024 = @($available | Where-Object { $_ -lt 1024 }).Count
     return [ordered]@{
         Status = if ($valid.Count -eq $Samples.Count) { "Collected" } else { "Partial" }
         ValidSampleCount = $valid.Count
@@ -24,6 +28,10 @@ function Measure-PerformanceHealth {
             PeakUsagePercent=[math]::Round($memoryMeasure.Maximum,2)
             AverageAvailableMB=[math]::Round($availableMeasure.Average,2)
             MinimumAvailableMB=[math]::Round($availableMeasure.Minimum,2)
+            SamplesAtOrAbove70Percent=[math]::Round(($memoryAt70/$valid.Count)*100,2)
+            SamplesAtOrAbove85Percent=[math]::Round(($memoryAt85/$valid.Count)*100,2)
+            SamplesAtOrAbove95Percent=[math]::Round(($memoryAt95/$valid.Count)*100,2)
+            SamplesBelow1024MB=[math]::Round(($memoryBelow1024/$valid.Count)*100,2)
         }
     }
 }

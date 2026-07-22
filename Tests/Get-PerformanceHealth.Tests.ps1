@@ -15,6 +15,10 @@ Describe 'Measure-PerformanceHealth' {
         $r.CPU.SamplesAtOrAbove90Percent | Should -Be 50
         $r.Memory.AverageUsagePercent | Should -Be 80
         $r.Memory.MinimumAvailableMB | Should -Be 500
+        $r.Memory.SamplesAtOrAbove70Percent | Should -Be 100
+        $r.Memory.SamplesAtOrAbove85Percent | Should -Be 50
+        $r.Memory.SamplesAtOrAbove95Percent | Should -Be 0
+        $r.Memory.SamplesBelow1024MB | Should -Be 50
     }
 
     It 'ignores invalid samples' {
