@@ -8,5 +8,17 @@
   "IncludeDisconnectedAdapters": false,
   "IncludeDeviceErrors": true,
   "OutputDirectory": ".\\Output",
-  "LogDirectory": ".\\Logs"
+  "LogDirectory": ".\\Logs",
+  "HealthCheck": {
+    "SampleDurationSeconds": 60,
+    "SampleIntervalSeconds": 1,
+    "EventLookbackDays": 7,
+    "MinimumFreeDiskPercent": 20,
+    "CriticalFreeDiskPercent": 10,
+    "MemoryWarningPercent": 70,
+    "MemoryHighPercent": 85,
+    "MemoryCriticalPercent": 95,
+    "MinimumAvailableMemoryMB": 1024,
+    "IncludePersonallyIdentifiableInformation": false
+  }
 }
