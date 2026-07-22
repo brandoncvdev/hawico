@@ -27,3 +27,13 @@ function Measure-PerformanceHealth {
         }
     }
 }
+function Get-PerformanceSample {
+ try {
+  $result=Get-Counter -Counter @('\Processor(_Total)\% Processor Time','\Memory\% Committed Bytes In Use','\Memory\Available MBytes') -ErrorAction Stop
+  $cpu=$result.CounterSamples|Where-Object Path -like '*processor time'|Select-Object -First 1
+  $usage=$result.CounterSamples|Where-Object Path -like '*committed bytes in use'|Select-Object -First 1
+  $available=$result.CounterSamples|Where-Object Path -like '*available mbytes'|Select-Object -First 1
+  if($null-eq$cpu-or$null-eq$usage-or$null-eq$available){return $null}
+  return [pscustomobject][ordered]@{CPUPercent=[math]::Round($cpu.CookedValue,2);MemoryUsagePercent=[math]::Round($usage.CookedValue,2);AvailableMemoryMB=[math]::Round($available.CookedValue,2)}
+ }catch{return $null}
+}

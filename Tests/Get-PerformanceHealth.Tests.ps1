@@ -1,4 +1,7 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-PerformanceHealth.ps1" }
+BeforeAll {
+ . "$PSScriptRoot/../Modules/Get-PerformanceHealth.ps1"
+ if(-not(Get-Command Get-Counter -ErrorAction SilentlyContinue)){function Get-Counter { param([string[]]$Counter) }}
+}
 
 Describe 'Measure-PerformanceHealth' {
     It 'summarizes valid CPU and memory samples' {
@@ -24,4 +27,14 @@ Describe 'Measure-PerformanceHealth' {
         $r = Measure-PerformanceHealth -Samples @($null,[pscustomobject]@{ CPUPercent=10; MemoryUsagePercent=20; AvailableMemoryMB=3000 })
         $r.Status | Should -Be 'Partial'
     }
+}
+Describe 'Get-PerformanceSample' {
+ It 'maps Windows counter values into a sample' {
+  Mock Get-Counter { [pscustomobject]@{CounterSamples=@([pscustomobject]@{Path='\\pc\\processor(_total)\\% processor time';CookedValue=40},[pscustomobject]@{Path='\\pc\\memory\\% committed bytes in use';CookedValue=75},[pscustomobject]@{Path='\\pc\\memory\\available mbytes';CookedValue=2048})} }
+  $r=Get-PerformanceSample
+  $r.CPUPercent|Should -Be 40
+  $r.MemoryUsagePercent|Should -Be 75
+  $r.AvailableMemoryMB|Should -Be 2048
+ }
+ It 'returns null when counters fail' { Mock Get-Counter { throw 'unavailable' }; Get-PerformanceSample|Should -BeNullOrEmpty }
 }
