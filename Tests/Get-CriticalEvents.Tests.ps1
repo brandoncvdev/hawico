@@ -14,6 +14,12 @@ Describe 'Group-CriticalEvent' {
   $r[0].Message|Should -Match '<USER>'
   $r[0].Message|Should -Match '<N>'
  }
+ It 'redacts common identifiers and bounds message length' {
+  $message = 'Contact alice@example.com from 192.168.10.5 correlation 550e8400-e29b-41d4-a716-446655440000 ' + ('x' * 400)
+  $r=Group-CriticalEvent -Events @([pscustomobject]@{ProviderName='Application Error';Id=1000;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message=$message})
+  $r[0].Message|Should -Not -Match 'alice@example.com|192\.168\.10\.5|550e8400'
+  $r[0].Message.Length|Should -BeLessOrEqual 240
+ }
  It 'returns an empty collection for no evidence' { @(Group-CriticalEvent -Events @()).Count|Should -Be 0 }
 }
 Describe 'Get-CriticalEvent' {

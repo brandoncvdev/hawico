@@ -111,4 +111,21 @@ Describe 'Get-HealthScore' {
         $result.Value | Should -BeNullOrEmpty
         $result.Status | Should -Be 'InsufficientData'
     }
+
+    It 'breaks equal bottleneck ratios by severity and stable category order' {
+        $bySeverity = Get-HealthScore -Categories @(
+            [pscustomobject]@{ Name='Storage';Weight=35;Available=$true;Deduction=7;HighestSeverity='Medium' },
+            [pscustomobject]@{ Name='CPU';Weight=20;Available=$true;Deduction=4;HighestSeverity='High' },
+            [pscustomobject]@{ Name='Memory';Weight=25;Available=$true;Deduction=0;HighestSeverity='Info' },
+            [pscustomobject]@{ Name='Events';Weight=20;Available=$true;Deduction=0;HighestSeverity='Info' }
+        )
+        $bySeverity.PrimaryBottleneck | Should -Be 'CPU'
+        $byOrder = Get-HealthScore -Categories @(
+            [pscustomobject]@{ Name='Storage';Weight=35;Available=$true;Deduction=7;HighestSeverity='High' },
+            [pscustomobject]@{ Name='CPU';Weight=20;Available=$true;Deduction=4;HighestSeverity='High' },
+            [pscustomobject]@{ Name='Memory';Weight=25;Available=$true;Deduction=0;HighestSeverity='Info' },
+            [pscustomobject]@{ Name='Events';Weight=20;Available=$true;Deduction=0;HighestSeverity='Info' }
+        )
+        $byOrder.PrimaryBottleneck | Should -Be 'Storage'
+    }
 }
