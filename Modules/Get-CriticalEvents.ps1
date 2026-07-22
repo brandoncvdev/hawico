@@ -24,6 +24,11 @@ function Get-CriticalEvent {
  return @((Get-CriticalEventResult -LookbackDays $LookbackDays).Events)
 }
 
+function Test-HealthNoMatchingEventError {
+ param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+ return [string]$ErrorRecord.FullyQualifiedErrorId -like 'NoMatchingEventsFound*'
+}
+
 function Get-CriticalEventResult {
  param([ValidateRange(1,30)][int]$LookbackDays=7)
  $startedAt=[datetimeoffset]::Now
@@ -49,7 +54,13 @@ function Get-CriticalEventResult {
     $queried=$true
     break
    }
-   catch{Write-Verbose ("Event provider alias unavailable: {0}" -f $candidate)}
+   catch{
+    if(Test-HealthNoMatchingEventError -ErrorRecord $_){
+     try{$providerInfo=@(Get-WinEvent -ListProvider $candidate -ErrorAction Stop)}catch{$providerInfo=@()}
+     if($providerInfo.Count-gt 0){$queried=$true;break}
+    }
+    Write-Verbose ("Event provider alias unavailable: {0}" -f $candidate)
+   }
   }
   if(-not$queried){$errors+=[pscustomobject][ordered]@{Provider=$definition.Provider;LogName=$definition.LogName;Code='EVENT-PROVIDER-FAILED';Message='The event provider could not be queried.';AttemptedProviders=@($definition.Candidates)}}
  }

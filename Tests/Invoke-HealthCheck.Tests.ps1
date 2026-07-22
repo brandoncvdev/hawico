@@ -20,12 +20,34 @@ Describe 'Invoke-HealthCheck' {
   (Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)).HealthCheck.Status|Should -Be 'Partial'
  }
  It 'derives storage and event rule metrics from collected evidence' {
-  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{AverageUsagePercent=10;SamplesAtOrAbove90Percent=0};Memory=@{AverageUsagePercent=20;MinimumAvailableMB=4096;SamplesAtOrAbove70Percent=0;SamplesAtOrAbove85Percent=0;SamplesAtOrAbove95Percent=0;SamplesBelow1024MB=0}};Storage=@{Status='Collected';PhysicalDisks=@(@{HealthStatus='Degraded';MediaType='SSD'});Volumes=@(@{Drive='C:';FreePercent=9;IsSystemVolume=$true})};Events=@(@{Provider='Disk';OccurrenceCount=3},@{Provider='WHEA-Logger';OccurrenceCount=1});EventStatus='Collected'}
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{AverageUsagePercent=10;SamplesAtOrAbove90Percent=0};Memory=@{AverageUsagePercent=20;MinimumAvailableMB=4096;SamplesAtOrAbove70Percent=0;SamplesAtOrAbove85Percent=0;SamplesAtOrAbove95Percent=0;SamplesBelow1024MB=0}};Storage=@{Status='Collected';PhysicalDisks=@(@{HealthStatus='Degraded';MediaType='SSD'});Volumes=@(@{Drive='C:';FreePercent=9;IsSystemVolume=$true})};Events=@(@{Provider='Disk';Id=7;Level='Error';OccurrenceCount=3},@{Provider='WHEA-Logger';Id=1;Level='Error';OccurrenceCount=1});EventStatus='Collected'}
   $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
   $r.HealthCheck.Findings.Id|Should -Contain 'STO-001'
   $r.HealthCheck.Findings.Id|Should -Contain 'STO-002'
   $r.HealthCheck.Findings.Id|Should -Contain 'STO-005'
   $r.HealthCheck.Findings.Id|Should -Contain 'EVT-001'
+ }
+ It 'scores only documented diagnostic event identifiers' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@(@{Provider='Kernel-Power';Id=42;Level='Information';OccurrenceCount=50},@{Provider='Kernel-Power';Id=41;Level='Critical';OccurrenceCount=1},@{Provider='Ntfs';Id=98;Level='Information';OccurrenceCount=3},@{Provider='Ntfs';Id=999;Level='Error';OccurrenceCount=50});EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-005'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'EVT-002'
+ }
+ It 'detects repeated unexpected shutdowns from Kernel-Power event 41' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@(@{Provider='Kernel-Power';Id=41;Level='Critical';OccurrenceCount=2});EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Contain 'EVT-002'
+ }
+ It 'ignores unrelated storage and application event identifiers' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@(@{Provider='Disk';Id=999;Level='Error';OccurrenceCount=50},@{Provider='Ntfs';Id=999;Level='Error';OccurrenceCount=50},@{Provider='Application Error';Id=999;Level='Error';OccurrenceCount=50},@{Provider='Application Hang';Id=999;Level='Error';OccurrenceCount=50});EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-005'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'EVT-003'
+ }
+ It 'detects repeated application crashes from Application Error event 1000' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@(@{Provider='Application Error';Id=1000;Level='Error';OccurrenceCount=5});EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Contain 'EVT-003'
  }
  It 'reports denied capabilities and failed sections as partial without inventing availability' {
   $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$false;Items=@(@{Name='Administrator';Status='Denied'})};Performance=@{Status='Failed';ValidSampleCount=0;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@();EventStatus='Failed'}

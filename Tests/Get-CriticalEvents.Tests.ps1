@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-CriticalEvents.ps1";if(-not(Get-Command Get-WinEvent -ErrorAction SilentlyContinue)){function Get-WinEvent { param($FilterHashtable) }} }
+BeforeAll { . "$PSScriptRoot/../Modules/Get-CriticalEvents.ps1";if(-not(Get-Command Get-WinEvent -ErrorAction SilentlyContinue)){function Get-WinEvent { param($FilterHashtable,$ListProvider) }} }
 Describe 'Group-CriticalEvent' {
  It 'groups repeated provider and id events' {
   $events=@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='bad sector 123'},[pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-02';Message='bad sector 456'})
@@ -23,6 +23,31 @@ Describe 'Group-CriticalEvent' {
  It 'returns an empty collection for no evidence' { @(Group-CriticalEvent -Events @()).Count|Should -Be 0 }
 }
 Describe 'Get-CriticalEvent' {
+ It 'recognizes the Windows no matching events condition' {
+  $errorRecord=[System.Management.Automation.ErrorRecord]::new([System.Exception]::new('No events were found'), 'NoMatchingEventsFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null)
+  Test-HealthNoMatchingEventError -ErrorRecord $errorRecord|Should -BeTrue
+ }
+ It 'treats a provider with no matching events as successfully queried' {
+  Mock Get-WinEvent {
+   if($ListProvider){return [pscustomobject]@{Name=$ListProvider}}
+   $errorRecord=[System.Management.Automation.ErrorRecord]::new([System.Exception]::new('No events were found'), 'NoMatchingEventsFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null)
+   throw $errorRecord
+  }
+  $result=Get-CriticalEventResult -LookbackDays 7
+  $result.Status|Should -Be 'Collected'
+  $result.Events|Should -BeNullOrEmpty
+  $result.Errors|Should -BeNullOrEmpty
+ }
+ It 'does not hide a missing provider behind a no matching events error' {
+  Mock Get-WinEvent {
+   if($ListProvider){throw 'provider unavailable'}
+   $errorRecord=[System.Management.Automation.ErrorRecord]::new([System.Exception]::new('No events were found'), 'NoMatchingEventsFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null)
+   throw $errorRecord
+  }
+  $result=Get-CriticalEventResult -LookbackDays 7
+  $result.Status|Should -Be 'Failed'
+  $result.Errors.Count|Should -BeGreaterThan 0
+ }
  It 'queries and groups Windows events' { Mock Get-WinEvent { if($FilterHashtable.ProviderName -eq 'Disk'){@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='error 1'})}else{@()} };(Get-CriticalEvent -LookbackDays 7)[0].OccurrenceCount|Should -Be 1 }
  It 'returns empty evidence when the provider fails' { Mock Get-WinEvent { throw 'denied' };@(Get-CriticalEvent -LookbackDays 7).Count|Should -Be 0 }
  It 'keeps successful providers when another provider fails' {

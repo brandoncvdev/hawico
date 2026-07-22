@@ -554,10 +554,15 @@ Los límites inferiores son inclusivos y los superiores exclusivos.
 | STO-002 | Volumen del sistema con espacio libre menor a 10% | Critical | 20 |
 | STO-003 | Volumen del sistema con espacio libre desde 10% y menor a 20% | High | 10 |
 | STO-004 | Disco del sistema identificado como HDD | Medium | 5 |
-| STO-005 | Tres o más eventos `Disk`, `Ntfs`, `StorPort` o `stornvme` | High | 15 |
+| STO-005 | Tres o más eventos diagnósticos de `Disk`, `Ntfs`, `StorPort` o `stornvme` | High | 15 |
 
 `STO-002` y `STO-003` son mutuamente excluyentes. La categoría se limita a 35.
 Un estado `Unknown` no activa `STO-001`.
+
+Para `STO-005`, `Disk` considera los IDs 7, 9, 11, 51, 153 y 157;
+`Ntfs`, los IDs 50, 55, 98 y 140; y `StorPort`/`stornvme`, únicamente
+eventos con nivel `Critical`, `Error` o `Warning`. Los demás eventos permanecen
+como evidencia observable, pero no reducen la puntuación.
 
 ### 13.2 Memory
 
@@ -588,11 +593,15 @@ acumularse y la categoría se limita a 25.
 | Regla | Condición dentro del periodo configurado | Severidad | Deducción |
 | --- | --- | --- | ---: |
 | EVT-001 | Uno o más eventos `WHEA-Logger` | Critical | 20 |
-| EVT-002 | Dos o más reinicios inesperados `Kernel-Power` | High | 12 |
-| EVT-003 | Cinco o más eventos `Application Error` o `Application Hang` | Medium | 8 |
+| EVT-002 | Dos o más reinicios inesperados `Kernel-Power` ID 41 | High | 12 |
+| EVT-003 | Cinco o más fallos `Application Error` ID 1000 o `Application Hang` ID 1002 | Medium | 8 |
 
 Las reglas pueden acumularse y la categoría se limita a 20. Los eventos ya
 utilizados por `STO-005` se excluyen de esta categoría.
+
+Una consulta sin coincidencias no vuelve parcial la sección: significa que el
+proveedor pudo consultarse y no produjo evidencia dentro del periodo. Sólo un
+error real de acceso o disponibilidad del proveedor degrada su estado.
 
 ## 14. Privacidad y seguridad
 
