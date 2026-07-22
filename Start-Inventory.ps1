@@ -78,7 +78,7 @@ try {
 
             "3" {
                 $result = & $healthCollector -Mode Diagnostic
-                if ($null -ne $result -and $result.Success -and (Test-Path -LiteralPath $result.HtmlPath)) {
+                if ($null -ne $result -and $result.Success -and -not [string]::IsNullOrWhiteSpace($result.HtmlPath) -and (Test-Path -LiteralPath $result.HtmlPath)) {
                     Start-Process -FilePath $result.HtmlPath
                 }
                 else { Write-Host "El diagnóstico de salud no pudo completarse." -ForegroundColor Red }
