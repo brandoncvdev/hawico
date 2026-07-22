@@ -1,5 +1,5 @@
 ﻿function Get-GraphicsInventory {
-    $raw = Get-CimDataSafe -ClassName "Win32_VideoController"
+    $raw = @(Get-CimDataSafe -ClassName "Win32_VideoController")
     return @(
         $raw | ForEach-Object {
             [ordered]@{

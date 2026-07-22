@@ -138,21 +138,25 @@ try {
     }
 }
 catch {
-    Write-Error ("No se pudo completar el inventario: {0}" -f $_.Exception.Message)
+    $errorFile = $_.InvocationInfo.ScriptName
+    $errorLine = $_.InvocationInfo.ScriptLineNumber
+
     Write-Host ""
     Write-Host "No se pudo completar el inventario." -ForegroundColor Red
-    Write-Host ("Mensaje: {0}" -f $_.Exception.Message) -ForegroundColor Red
-    Write-Host ("Posición: {0}" -f $_.InvocationInfo.PositionMessage) -ForegroundColor Yellow
-    Write-Host ("Stack trace: {0}" -f $_.ScriptStackTrace) -ForegroundColor DarkYellow
-    Write-Host ""
+    Write-Host ("Error: {0}" -f $_.Exception.Message) -ForegroundColor Red
+
+    if (-not [string]::IsNullOrWhiteSpace($errorFile)) {
+        Write-Host ("Archivo real: {0}" -f $errorFile) -ForegroundColor Yellow
+        Write-Host ("Línea real: {0}" -f $errorLine) -ForegroundColor Yellow
+    }
 
     return [ordered]@{
         Success = $false
         OutputDirectory = $outputDir
         LogPath = $logPath
         ErrorMessage = $_.Exception.Message
-        ErrorPosition = $_.InvocationInfo.PositionMessage
-        ErrorStackTrace = $_.ScriptStackTrace
+        ErrorFile = $errorFile
+        ErrorLine = $errorLine
     }
 }
 finally {

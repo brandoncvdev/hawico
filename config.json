@@ -5,7 +5,7 @@
   "GenerateHTML": true,
   "GenerateCSV": false,
   "IncludeIPv6": true,
-  "IncludeDisconnectedAdapters": false,
+  "IncludeDisconnectedAdapters": true,
   "IncludeDeviceErrors": true,
   "OutputDirectory": ".\\Output",
   "LogDirectory": ".\\Logs"
