@@ -120,7 +120,7 @@ $logLines = @(
     "Status=$($report.HealthCheck.Status)",
     "DurationMilliseconds=$($report.Collection.DurationMilliseconds)"
 )
-$logLines += @($report.HealthCheck.Sections | ForEach-Object { "Section=$($_.Name);Status=$($_.Status);DurationMilliseconds=$($_.DurationMilliseconds)" })
+$logLines += @($report.HealthCheck.Sections | ForEach-Object { "Section=$($_.Name);Status=$($_.Status);DurationMilliseconds=$($_.DurationMilliseconds);ErrorCode=$($_.ErrorCode);ErrorMessage=$($_.ErrorMessage)" })
 $logLines | Set-Content -LiteralPath $logPath -Encoding UTF8
 
 $jsonWritten = $false

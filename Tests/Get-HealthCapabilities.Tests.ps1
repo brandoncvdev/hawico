@@ -3,6 +3,9 @@ BeforeAll {
 }
 
 Describe 'Get-HealthCapability' {
+    It 'reads PowerShell 5.1 metadata without requiring the Platform property' {
+        (Get-HealthPowerShellValue -Table @{PSEdition='Desktop'} -Name 'Platform' -DefaultValue 'Win32NT') | Should -Be 'Win32NT'
+    }
     BeforeEach {
         Mock Test-HealthAdministrator { $true }
         Mock Get-Command { [pscustomobject]@{ Name = $Name } }

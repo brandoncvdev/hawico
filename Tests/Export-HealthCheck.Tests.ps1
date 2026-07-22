@@ -9,4 +9,9 @@ Describe 'New-HealthCheckHtml' {
   $html|Should -Match 'C:';$html|Should -Match 'Application Error'
   $html|Should -Match 'Some providers unavailable';$html|Should -Match '2026-01-01'
  }
+ It 'renders unavailable performance metrics without throwing under StrictMode' {
+  $path=Join-Path $TestDrive 'partial.html';$r=[ordered]@{Computer=@{};Collection=@{CollectedAt='2026-01-01'};HealthCheck=@{Status='Partial';Score=@{Value=$null;Status='InsufficientData';ConfidencePercent=35};PrimaryBottleneck='None';Findings=@();Metrics=@{CPU=@{};Memory=@{};Storage=@{PhysicalDisks=@();Volumes=@()};Events=@()};Recommendations=@();Sections=@(@{Name='Performance';Status='Failed';ErrorMessage='No valid samples'})}}
+  { & { Set-StrictMode -Version Latest;New-HealthCheckHtml -Report $r -Path $path } }|Should -Not -Throw
+  (Get-Content $path -Raw)|Should -Match 'No disponible'
+ }
 }

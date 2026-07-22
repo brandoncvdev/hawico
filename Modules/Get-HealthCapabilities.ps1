@@ -1,5 +1,16 @@
+function Get-HealthPowerShellValue {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Table,
+        [Parameter(Mandatory)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($Table.Contains($Name) -and $null -ne $Table[$Name]) { return $Table[$Name] }
+    return $DefaultValue
+}
+
 function Test-HealthAdministrator {
-    if ($PSVersionTable.Platform -ne "Win32NT" -and $env:OS -ne "Windows_NT") {
+    $platform = Get-HealthPowerShellValue -Table $PSVersionTable -Name 'Platform' -DefaultValue 'Win32NT'
+    if ($platform -ne "Win32NT" -and $env:OS -ne "Windows_NT") {
         return $false
     }
 
@@ -42,8 +53,8 @@ function Get-HealthCapability {
     return [ordered]@{
         IsAdministrator = $isAdministrator
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
-        Edition = $PSVersionTable.PSEdition
-        Platform = if ($null -ne $PSVersionTable.Platform) { $PSVersionTable.Platform } else { "Win32NT" }
+        Edition = Get-HealthPowerShellValue -Table $PSVersionTable -Name 'PSEdition' -DefaultValue 'Desktop'
+        Platform = Get-HealthPowerShellValue -Table $PSVersionTable -Name 'Platform' -DefaultValue 'Win32NT'
         Items = $items
     }
 }

@@ -1,6 +1,7 @@
 BeforeAll {
  . "$PSScriptRoot/../Modules/Get-PerformanceHealth.ps1"
  if(-not(Get-Command Get-Counter -ErrorAction SilentlyContinue)){function Get-Counter { param([string[]]$Counter) }}
+ if(-not(Get-Command Get-CimInstance -ErrorAction SilentlyContinue)){function Get-CimInstance { param([string]$ClassName) }}
 }
 
 Describe 'Measure-PerformanceHealth' {
@@ -52,4 +53,15 @@ Describe 'Get-PerformanceSample' {
   $r.AvailableMemoryMB|Should -Be 2048
  }
  It 'returns null when counters fail' { Mock Get-Counter { throw 'unavailable' }; Get-PerformanceSample|Should -BeNullOrEmpty }
+ It 'falls back to locale-independent CIM performance classes when counters fail' {
+  Mock Get-Counter { throw 'localized counters unavailable' }
+  Mock Get-CimInstance {
+   if($ClassName -eq 'Win32_PerfFormattedData_PerfOS_Processor'){return [pscustomobject]@{Name='_Total';PercentProcessorTime=42}}
+   if($ClassName -eq 'Win32_PerfFormattedData_PerfOS_Memory'){return [pscustomobject]@{PercentCommittedBytesInUse=76;AvailableMBytes=1536}}
+  }
+  $r=Get-PerformanceSample
+  $r.CPUPercent|Should -Be 42
+  $r.MemoryUsagePercent|Should -Be 76
+  $r.AvailableMemoryMB|Should -Be 1536
+ }
 }

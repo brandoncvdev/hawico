@@ -13,7 +13,7 @@ function Measure-PerformanceHealth {
     )
     $valid = @($Samples | Where-Object { $null -ne $_ -and $null -ne $_.CPUPercent -and $null -ne $_.MemoryUsagePercent -and $null -ne $_.AvailableMemoryMB })
     if ($valid.Count -eq 0) {
-        return [ordered]@{ Status="Failed"; ValidSampleCount=0; CPU=@{}; Memory=@{} }
+        return [ordered]@{ Status="Failed";ValidSampleCount=0;CPU=@{};Memory=@{};ErrorCode='PERFORMANCE-NO-VALID-SAMPLES';ErrorMessage='No valid CPU and memory samples were collected.' }
     }
     $cpu = @($valid | ForEach-Object { [double]$_.CPUPercent })
     $memory = @($valid | ForEach-Object { [double]$_.MemoryUsagePercent })
@@ -64,7 +64,14 @@ function Get-PerformanceSample {
   $cpu=$result.CounterSamples|Where-Object Path -like '*processor time'|Select-Object -First 1
   $usage=$result.CounterSamples|Where-Object Path -like '*committed bytes in use'|Select-Object -First 1
   $available=$result.CounterSamples|Where-Object Path -like '*available mbytes'|Select-Object -First 1
-  if($null-eq$cpu-or$null-eq$usage-or$null-eq$available){return $null}
-  return [pscustomobject][ordered]@{CPUPercent=[math]::Round($cpu.CookedValue,2);MemoryUsagePercent=[math]::Round($usage.CookedValue,2);AvailableMemoryMB=[math]::Round($available.CookedValue,2)}
+  if($null-ne$cpu-and$null-ne$usage-and$null-ne$available){
+   return [pscustomobject][ordered]@{CPUPercent=[math]::Round($cpu.CookedValue,2);MemoryUsagePercent=[math]::Round($usage.CookedValue,2);AvailableMemoryMB=[math]::Round($available.CookedValue,2)}
+  }
+ }catch{Write-Verbose 'Localized performance counters are unavailable; trying CIM performance classes.'}
+ try{
+  $processor=Get-CimInstance -ClassName 'Win32_PerfFormattedData_PerfOS_Processor' -ErrorAction Stop|Where-Object Name -eq '_Total'|Select-Object -First 1
+  $memory=Get-CimInstance -ClassName 'Win32_PerfFormattedData_PerfOS_Memory' -ErrorAction Stop|Select-Object -First 1
+  if($null-eq$processor-or$null-eq$memory){return $null}
+  return [pscustomobject][ordered]@{CPUPercent=[math]::Round([double]$processor.PercentProcessorTime,2);MemoryUsagePercent=[math]::Round([double]$memory.PercentCommittedBytesInUse,2);AvailableMemoryMB=[math]::Round([double]$memory.AvailableMBytes,2)}
  }catch{return $null}
 }
