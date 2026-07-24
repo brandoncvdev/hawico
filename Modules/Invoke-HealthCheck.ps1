@@ -75,6 +75,7 @@ function Invoke-HealthCheck {
     $eventErrors = @(Get-HealthInputValue -Object $InputData -Name 'EventErrors' -DefaultValue @())
     $capabilities = $InputData.Capabilities
     $healthConfig = Get-HealthInputValue -Object $InputData -Name 'HealthConfig'
+    $extendedDiagnostics = Get-HealthInputValue -Object $InputData -Name 'ExtendedDiagnostics' -DefaultValue ([ordered]@{ ContractVersion = '1.0' })
 
     $diskEventCount = [int](Get-HealthNumericSum -Items @($events | Where-Object { Test-HealthStorageScoringEvent -InputEvent $_ }) -PropertyName 'OccurrenceCount')
     $wheaCount = [int](Get-HealthNumericSum -Items @($events | Where-Object Provider -eq 'WHEA-Logger') -PropertyName 'OccurrenceCount')
@@ -193,6 +194,7 @@ function Invoke-HealthCheck {
         Sections = $sections
         Sample = $sample
         Metrics = [ordered]@{ CPU = $performance.CPU; Memory = $performance.Memory; Storage = $storage; Events = $events }
+        ExtendedDiagnostics = $extendedDiagnostics
         Score = $score
         PrimaryBottleneck = $score.PrimaryBottleneck
         Findings = $findings

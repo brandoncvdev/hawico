@@ -19,6 +19,7 @@ $modules = @(
     'Get-PerformanceHealth.ps1',
     'Get-StorageHealth.ps1',
     'Get-CriticalEvents.ps1',
+    'Get-ExtendedDiagnostics.ps1',
     'Get-HealthFindings.ps1',
     'New-HealthCheckReport.ps1',
     'Invoke-HealthCheck.ps1',
@@ -74,6 +75,18 @@ Write-Progress -Activity 'Windows Health Check' -Status 'Consultando eventos cr√
 $eventResult = Invoke-HealthCollectorSection -Name 'Events' -DefaultData ([ordered]@{ Status = 'Failed'; Events = @(); ErrorCode = 'EVENT-QUERY-FAILED'; ErrorMessage = 'Event collection failed.' }) -Operation {
     Get-CriticalEventResult -LookbackDays $healthConfig.EventLookbackDays
 }
+Write-Progress -Activity 'Windows Health Check' -Status 'Evaluando procesos activos' -PercentComplete 92
+$processResult = Invoke-HealthCollectorSection -Name 'Processes' -DefaultData ([ordered]@{ Status = 'Failed'; Source = 'Win32_PerfFormattedData_PerfProc_Process'; CapturedCount = 0; TopByCpu = @(); TopByMemory = @() }) -Operation {
+    Get-ProcessDiagnostic -TopCount $healthConfig.TopProcessCount
+}
+Write-Progress -Activity 'Windows Health Check' -Status 'Consultando programas de inicio' -PercentComplete 94
+$startupResult = Invoke-HealthCollectorSection -Name 'StartupPrograms' -DefaultData ([ordered]@{ Status = 'Failed'; Source = 'Win32_StartupCommand'; Items = @() }) -Operation {
+    Get-StartupDiagnostic
+}
+Write-Progress -Activity 'Windows Health Check' -Status 'Consultando software instalado' -PercentComplete 96
+$softwareResult = Invoke-HealthCollectorSection -Name 'InstalledSoftware' -DefaultData ([ordered]@{ Status = 'Failed'; Source = 'RegistryUninstallKeys'; Items = @() }) -Operation {
+    Get-InstalledSoftwareDiagnostic
+}
 
 $collectionTimer.Stop()
 $inventorySections = @($computerResult.Section, $processorResult.Section, $memoryResult.Section, $storageInventoryResult.Section)
@@ -105,7 +118,13 @@ $inputData = [ordered]@{
     Events = @($eventResult.Data.Events)
     EventStatus = $eventResult.Section.Status
     EventErrors = @($eventResult.Data.Errors)
-    Sections = @($inventorySection, $capabilityResult.Section, $performanceResult.Section, $storageResult.Section, $eventResult.Section)
+    ExtendedDiagnostics = [ordered]@{
+        ContractVersion = '1.0'
+        Processes = $processResult.Data
+        StartupPrograms = $startupResult.Data
+        InstalledSoftware = $softwareResult.Data
+    }
+    Sections = @($inventorySection, $capabilityResult.Section, $performanceResult.Section, $storageResult.Section, $eventResult.Section, $processResult.Section, $startupResult.Section, $softwareResult.Section)
     Sample = [ordered]@{
         RequestedDurationSeconds = $healthConfig.SampleDurationSeconds
         ActualDurationSeconds = $actualSampleSeconds
@@ -113,7 +132,7 @@ $inputData = [ordered]@{
         ValidSampleCount = [int]$performanceResult.Data.ValidSampleCount
     }
 }
-Write-Progress -Activity 'Windows Health Check' -Status 'Generando reporte' -PercentComplete 95
+Write-Progress -Activity 'Windows Health Check' -Status 'Generando reporte' -PercentComplete 98
 $report = Invoke-HealthCheck -InputData $inputData -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds $collectionTimer.ElapsedMilliseconds
 
 $logLines = @(

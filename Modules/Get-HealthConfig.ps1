@@ -25,6 +25,7 @@ function Get-HealthCheckConfig {
         MemoryHighPercent = [double](Get-HealthConfigProperty -Object $health -Name "MemoryHighPercent" -DefaultValue 85)
         MemoryCriticalPercent = [double](Get-HealthConfigProperty -Object $health -Name "MemoryCriticalPercent" -DefaultValue 95)
         MinimumAvailableMemoryMB = [int](Get-HealthConfigProperty -Object $health -Name "MinimumAvailableMemoryMB" -DefaultValue 1024)
+        TopProcessCount = [int](Get-HealthConfigProperty -Object $health -Name "TopProcessCount" -DefaultValue 10)
         IncludePersonallyIdentifiableInformation = [bool](Get-HealthConfigProperty -Object $health -Name "IncludePersonallyIdentifiableInformation" -DefaultValue $false)
         GenerateJSON = [bool](Get-HealthConfigProperty -Object $Config -Name "GenerateJSON" -DefaultValue $true)
         GenerateHTML = [bool](Get-HealthConfigProperty -Object $Config -Name "GenerateHTML" -DefaultValue $true)
@@ -38,6 +39,9 @@ function Get-HealthCheckConfig {
     }
     if ($result.EventLookbackDays -lt 1 -or $result.EventLookbackDays -gt 30) {
         throw "HealthCheck.EventLookbackDays debe estar entre 1 y 30."
+    }
+    if ($result.TopProcessCount -lt 1 -or $result.TopProcessCount -gt 50) {
+        throw "HealthCheck.TopProcessCount debe estar entre 1 y 50."
     }
     if (-not ($result.MemoryWarningPercent -lt $result.MemoryHighPercent -and $result.MemoryHighPercent -lt $result.MemoryCriticalPercent)) {
         throw "HealthCheck.MemoryWarningPercent, MemoryHighPercent y MemoryCriticalPercent deben estar ordenados."

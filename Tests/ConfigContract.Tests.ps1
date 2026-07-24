@@ -9,5 +9,6 @@ Describe 'config.json HealthCheck contract' {
   $c.HealthCheck.MemoryWarningPercent|Should -Be 70
   $c.HealthCheck.MemoryHighPercent|Should -Be 85
   $c.HealthCheck.MemoryCriticalPercent|Should -Be 95
+  $c.HealthCheck.TopProcessCount|Should -Be 10
  }
 }

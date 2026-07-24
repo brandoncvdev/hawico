@@ -19,6 +19,7 @@
     "MemoryHighPercent": 85,
     "MemoryCriticalPercent": 95,
     "MinimumAvailableMemoryMB": 1024,
+    "TopProcessCount": 10,
     "IncludePersonallyIdentifiableInformation": false
   }
 }

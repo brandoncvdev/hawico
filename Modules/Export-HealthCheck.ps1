@@ -30,6 +30,10 @@
     $memory = Get-HealthHtmlProperty -Object $metrics -Name 'Memory' -DefaultValue @{}
     $storage = Get-HealthHtmlProperty -Object $metrics -Name 'Storage' -DefaultValue @{}
     $events = @(Get-HealthHtmlProperty -Object $metrics -Name 'Events' -DefaultValue @())
+    $extendedDiagnostics = Get-HealthHtmlProperty -Object $health -Name 'ExtendedDiagnostics' -DefaultValue @{}
+    $processDiagnostics = Get-HealthHtmlProperty -Object $extendedDiagnostics -Name 'Processes' -DefaultValue @{}
+    $startupDiagnostics = Get-HealthHtmlProperty -Object $extendedDiagnostics -Name 'StartupPrograms' -DefaultValue @{}
+    $softwareDiagnostics = Get-HealthHtmlProperty -Object $extendedDiagnostics -Name 'InstalledSoftware' -DefaultValue @{}
 
     $findingRows = @(Get-HealthHtmlProperty -Object $health -Name 'Findings' -DefaultValue @() | ForEach-Object {
         '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td><strong>{3}</strong><br>{4}</td></tr>' -f (
@@ -57,6 +61,21 @@
         '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Name')), (
             ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Status')), (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'ErrorMessage'))
     }) -join ''
+    $processRows = @(Get-HealthHtmlProperty -Object $processDiagnostics -Name 'TopByCpu' -DefaultValue @() | ForEach-Object {
+        '<tr><td>{0}</td><td>{1}</td><td>{2}%</td><td>{3} MB</td></tr>' -f (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Name')), (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'ProcessId')), (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'CpuUsagePercent')), (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'WorkingSetMB'))
+    }) -join ''
+    $startupRows = @(Get-HealthHtmlProperty -Object $startupDiagnostics -Name 'Items' -DefaultValue @() | ForEach-Object {
+        '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td></tr>' -f (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Name')), (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Location')), (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Scope')), (ConvertTo-EncodedHtmlValue (ConvertTo-HealthDisplayValue (Get-HealthHtmlProperty -Object $_ -Name 'Enabled')))
+    }) -join ''
+    $softwareRows = @(Get-HealthHtmlProperty -Object $softwareDiagnostics -Name 'Items' -DefaultValue @() | ForEach-Object {
+        '<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>' -f (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Name')), (ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Version')), (
+            ConvertTo-EncodedHtmlValue (Get-HealthHtmlProperty -Object $_ -Name 'Publisher'))
+    }) -join ''
 
     $html = @"
 <!doctype html>
@@ -71,6 +90,7 @@
 <section><h2>CPU y memoria</h2><p>CPU promedio: $(ConvertTo-EncodedHtmlValue (ConvertTo-HealthDisplayValue (Get-HealthHtmlProperty -Object $cpu -Name 'AverageUsagePercent')))% · CPU máximo: $(ConvertTo-EncodedHtmlValue (ConvertTo-HealthDisplayValue (Get-HealthHtmlProperty -Object $cpu -Name 'PeakUsagePercent')))%</p><p>Memoria promedio: $(ConvertTo-EncodedHtmlValue (ConvertTo-HealthDisplayValue (Get-HealthHtmlProperty -Object $memory -Name 'AverageUsagePercent')))% · Memoria mínima disponible: $(ConvertTo-EncodedHtmlValue (ConvertTo-HealthDisplayValue (Get-HealthHtmlProperty -Object $memory -Name 'MinimumAvailableMB'))) MB</p></section>
 <section><h2>Discos físicos</h2><table><thead><tr><th>Disco</th><th>Medio</th><th>Salud</th></tr></thead><tbody>$diskRows</tbody></table><h3>Volúmenes</h3><table><thead><tr><th>Volumen</th><th>Libre</th><th>Sistema</th></tr></thead><tbody>$volumeRows</tbody></table></section>
 <section><h2>Eventos</h2><table><thead><tr><th>Proveedor</th><th>ID</th><th>Ocurrencias</th></tr></thead><tbody>$eventRows</tbody></table></section>
+<section><h2>Diagnóstico extendido</h2><h3>Procesos con mayor CPU</h3><table><thead><tr><th>Proceso</th><th>PID</th><th>CPU</th><th>Memoria</th></tr></thead><tbody>$processRows</tbody></table><h3>Programas de inicio</h3><table><thead><tr><th>Nombre</th><th>Ubicación</th><th>Alcance</th><th>Habilitado</th></tr></thead><tbody>$startupRows</tbody></table><h3>Software instalado</h3><p>Total: $(ConvertTo-EncodedHtmlValue (@(Get-HealthHtmlProperty -Object $softwareDiagnostics -Name 'Items' -DefaultValue @()).Count))</p><table><thead><tr><th>Nombre</th><th>Versión</th><th>Fabricante</th></tr></thead><tbody>$softwareRows</tbody></table></section>
 <section><h2>Recomendaciones</h2><table><thead><tr><th>ID</th><th>Acción</th><th>Hallazgos</th></tr></thead><tbody>$recommendationRows</tbody></table></section>
 <section><h2>Secciones omitidas o incompletas</h2><table><thead><tr><th>Sección</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>$sectionRows</tbody></table></section>
 </main></body></html>

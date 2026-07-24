@@ -67,4 +67,13 @@ Describe 'Invoke-HealthCheck' {
   $section.DurationMilliseconds|Should -Be 12
   ($r.HealthCheck.Errors|Where-Object Provider -eq 'WHEA-Logger').Code|Should -Be 'EVENT-PROVIDER-FAILED'
  }
+ It 'preserves extended diagnostics without changing scoring version' {
+  $extended=[ordered]@{ContractVersion='1.0';Processes=@{Status='Collected';TopByCpu=@(@{Name='app';ProcessId=10})};StartupPrograms=@{Status='Collected';Items=@()};InstalledSoftware=@{Status='Collected';Items=@()}}
+  $inputData=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@();Volumes=@()};Events=@();EventStatus='Collected';ExtendedDiagnostics=$extended;Sections=@([pscustomobject]@{Name='Processes';Status='Collected'})}
+  $r=Invoke-HealthCheck -InputData $inputData -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.ContractVersion|Should -Be '1.2'
+  $r.HealthCheck.ExtendedDiagnostics.Processes.TopByCpu[0].Name|Should -Be 'app'
+  $r.HealthCheck.Score.ScoringVersion|Should -Be '1.0'
+  $r.HealthCheck.Sections.Name|Should -Contain 'Processes'
+ }
 }

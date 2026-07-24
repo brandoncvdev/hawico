@@ -7,7 +7,7 @@ Describe 'Windows health collector integration' -Tag 'Integration' -Skip:(-not $
         $script:result = & $collectorPath -Mode Diagnostic -SampleDurationSeconds 10
     }
 
-    It 'produces every configured delivery-one artifact' {
+    It 'produces every configured health-check artifact' {
         $result.Success | Should -BeTrue
         Test-Path -LiteralPath $result.JsonPath | Should -BeTrue
         Test-Path -LiteralPath $result.HtmlPath | Should -BeTrue
@@ -18,10 +18,14 @@ Describe 'Windows health collector integration' -Tag 'Integration' -Skip:(-not $
         $report = Get-Content -LiteralPath $result.JsonPath -Raw | ConvertFrom-Json
         $report.SchemaVersion | Should -Be '2.0'
         $report.Collection.Type | Should -Be 'WindowsHealthCheck'
-        $report.HealthCheck.ContractVersion | Should -Be '1.1'
+        $report.HealthCheck.ContractVersion | Should -Be '1.2'
+        $report.HealthCheck.ExtendedDiagnostics.ContractVersion | Should -Be '1.0'
         $report.HealthCheck.Status | Should -BeIn @('Completed', 'Partial')
         $report.HealthCheck.Sections.Name | Should -Contain 'Performance'
         $report.HealthCheck.Sections.Name | Should -Contain 'Storage'
         $report.HealthCheck.Sections.Name | Should -Contain 'Events'
+        $report.HealthCheck.Sections.Name | Should -Contain 'Processes'
+        $report.HealthCheck.Sections.Name | Should -Contain 'StartupPrograms'
+        $report.HealthCheck.Sections.Name | Should -Contain 'InstalledSoftware'
     }
 }

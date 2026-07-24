@@ -8,4 +8,7 @@ Describe 'Collector_Windows_HealthCheck.ps1 contract' {
  It 'contains independent collection failures instead of aborting later sections' { $script|Should -Match 'Invoke-HealthCollectorSection';$script|Should -Match 'Get-CriticalEventResult' }
  It 'shows collection progress while the diagnostic is running' { $script|Should -Match 'Write-Progress';$script|Should -Match 'PercentComplete' }
  It 'records section error codes and messages in the local log' { $script|Should -Match 'ErrorCode=';$script|Should -Match 'ErrorMessage=' }
+ It 'collects the first extended diagnostic slice' {
+  foreach($name in @('Get-ExtendedDiagnostics','Get-ProcessDiagnostic','Get-StartupDiagnostic','Get-InstalledSoftwareDiagnostic')){$script|Should -Match ([regex]::Escape($name))}
+ }
 }

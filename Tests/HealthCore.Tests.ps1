@@ -20,6 +20,7 @@ Describe 'Get-HealthCheckConfig' {
         $result.MemoryCriticalPercent | Should -Be 95
         $result.MinimumAvailableMemoryMB | Should -Be 1024
         $result.IncludePersonallyIdentifiableInformation | Should -BeFalse
+        $result.TopProcessCount | Should -Be 10
         $result.GenerateJSON | Should -BeTrue
         $result.GenerateHTML | Should -BeFalse
     }
@@ -57,6 +58,14 @@ Describe 'Get-HealthCheckConfig' {
                 }
             })
         } | Should -Throw '*MemoryWarningPercent*'
+    }
+
+    It 'rejects an invalid extended process limit' {
+        {
+            Get-HealthCheckConfig -Config ([pscustomobject]@{
+                HealthCheck = [pscustomobject]@{ TopProcessCount = 0 }
+            })
+        } | Should -Throw '*TopProcessCount*'
     }
 }
 

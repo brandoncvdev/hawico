@@ -30,11 +30,15 @@ Incluye exclusivamente:
 
 ### 2.2 Entregable 2: diagnóstico extendido
 
-Quedan fuera del primer entregable:
+El primer checkpoint del entregable 2 incorpora:
 
-- Procesos de alto consumo y programas de inicio.
+- Procesos con mayor consumo instantáneo de CPU y memoria.
+- Programas de inicio, sin exponer comandos ni usuarios.
+- Software instalado visible en las claves de desinstalación.
+
+Los siguientes checkpoints incorporarán:
+
 - Servicios de Windows y tareas programadas.
-- Software instalado.
 - Integridad de Windows mediante SFC y DISM en modo de verificación.
 - Windows Update y reinicios pendientes.
 - Estado de Microsoft Defender, antivirus y firewall.
@@ -110,6 +114,7 @@ hawico/
 │   ├── Get-PerformanceHealth.ps1
 │   ├── Get-StorageHealth.ps1
 │   ├── Get-CriticalEvents.ps1
+│   ├── Get-ExtendedDiagnostics.ps1
 │   ├── Get-HealthFindings.ps1
 │   ├── Export.ps1
 │   └── Export-HealthCheck.ps1
@@ -129,6 +134,7 @@ hawico/
 | `Get-PerformanceHealth.ps1` | Muestrear CPU y memoria sin aplicar cambios. |
 | `Get-StorageHealth.ps1` | Evaluar discos físicos, volúmenes y disponibilidad de sus datos. |
 | `Get-CriticalEvents.ps1` | Consultar y agrupar eventos relevantes. |
+| `Get-ExtendedDiagnostics.ps1` | Normalizar procesos activos, programas de inicio y software instalado sin ejecutar cambios. |
 | `Get-HealthFindings.ps1` | Aplicar reglas, scoring y recomendaciones. |
 | `Export-HealthCheck.ps1` | Crear el HTML usando los helpers visuales existentes cuando aplique. |
 
@@ -378,7 +384,7 @@ Los consumidores actuales deben poder ignorar propiedades nuevas. La forma de
   "Memory": {},
   "Storage": {},
   "HealthCheck": {
-    "ContractVersion": "1.1",
+    "ContractVersion": "1.2",
     "Status": "Completed",
     "IsAdministrator": true,
     "Capabilities": [],
@@ -394,6 +400,26 @@ Los consumidores actuales deben poder ignorar propiedades nuevas. La forma de
       "Memory": {},
       "Storage": {},
       "Events": {}
+    },
+    "ExtendedDiagnostics": {
+      "ContractVersion": "1.0",
+      "Processes": {
+        "Status": "Collected",
+        "Source": "Win32_PerfFormattedData_PerfProc_Process",
+        "CapturedCount": 125,
+        "TopByCpu": [],
+        "TopByMemory": []
+      },
+      "StartupPrograms": {
+        "Status": "Collected",
+        "Source": "Win32_StartupCommand",
+        "Items": []
+      },
+      "InstalledSoftware": {
+        "Status": "Collected",
+        "Source": "RegistryUninstallKeys",
+        "Items": []
+      }
     },
     "Score": {
       "Value": 92,
@@ -619,6 +645,11 @@ Con `IncludePersonallyIdentifiableInformation: false`:
 - `Collection.ScriptUser` conserva su tipo `string` con el valor `<REDACTED>`.
 - Los nombres de usuario en rutas se reemplazan por `<USER>`.
 - Los mensajes de eventos se resumen sin datos variables sensibles.
+- Los programas de inicio no publican el comando, la ruta ejecutable, el usuario
+  ni identificadores SID; `Location` se reduce a una clasificación estable.
+- El software instalado no publica rutas de instalación ni comandos de
+  desinstalación. Se consulta el registro y nunca `Win32_Product`, para evitar
+  reparaciones MSI como efecto lateral.
 - El HTML no muestra usuario, rutas completas ni números de serie.
 
 El JSON conserva los campos del contrato aunque sus valores sean `null`.
@@ -711,6 +742,8 @@ exclusivamente del estado de la máquina que ejecuta las pruebas.
 - `HealthCheck.ContractVersion 1.1` agrega detalle aditivo de proveedores de eventos
   fallidos, aliases canónicos para proveedores modernos de Windows y una
   explicación visual de la diferencia entre completitud y cobertura del score.
+- `HealthCheck.ContractVersion 1.2` agrega `ExtendedDiagnostics` con su propio
+  contrato `1.0` para procesos, programas de inicio y software instalado.
 - `ScoringVersion 1.0` y sus reglas permanecen sin cambios.
 
 - Cambios aditivos en `HealthCheck` incrementan su versión menor.
