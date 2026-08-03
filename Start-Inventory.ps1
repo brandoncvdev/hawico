@@ -17,6 +17,31 @@ try {
         throw "No se encontró el archivo de configuración: $configPath"
     }
 
+    . (Join-Path $basePath "Modules\Common.ps1")
+    . (Join-Path $basePath "Modules\New-InventoryCollectionSession.ps1")
+
+    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $sessionParameters = @{
+        SessionId = "SES-UNASSIGNED"
+        OrganizationId = $null
+        ProfileId = "basic-inventory"
+        Technician = $null
+    }
+
+    if ($null -ne $config.CollectionSession) {
+        foreach ($propertyName in @("SessionId", "OrganizationId", "ProfileId", "Technician")) {
+            if ($config.CollectionSession.PSObject.Properties.Name -contains $propertyName) {
+                $sessionParameters[$propertyName] = $config.CollectionSession.$propertyName
+            }
+        }
+    }
+
+    $collectionSession = New-InventoryCollectionSession @sessionParameters -WarningAction Continue
+
+    $collectionArguments = @{
+        SessionId = $collectionSession.SessionId
+    }
+
     function Wait-MenuInput {
         Write-Host ""
         [void](Read-Host "Presione Enter para continuar")
@@ -47,7 +72,7 @@ try {
 
         switch ($option) {
             "1" {
-                $result = & $collector -Mode Full
+                $result = & $collector -Mode Full @collectionArguments
 
                 if ($null -ne $result -and $result.Success) {
                     if (Test-Path -LiteralPath $result.HtmlPath) {
@@ -62,7 +87,7 @@ try {
             }
 
             "2" {
-                $result = & $collector -Mode Quick
+                $result = & $collector -Mode Quick @collectionArguments
 
                 if ($null -ne $result -and $result.Success) {
                     if (Test-Path -LiteralPath $result.HtmlPath) {

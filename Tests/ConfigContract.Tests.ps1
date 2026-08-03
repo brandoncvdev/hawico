@@ -9,6 +9,16 @@ Describe 'config.json HealthCheck contract' {
   $c.HealthCheck.MemoryWarningPercent|Should -Be 70
   $c.HealthCheck.MemoryHighPercent|Should -Be 85
   $c.HealthCheck.MemoryCriticalPercent|Should -Be 95
-  $c.HealthCheck.TopProcessCount|Should -Be 10
+ $c.HealthCheck.TopProcessCount|Should -Be 10
+ }
+}
+
+Describe 'config.json CollectionSession contract' {
+ It 'contains backward-compatible collection context defaults' {
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.CollectionSession.SessionId|Should -Be 'SES-UNASSIGNED'
+  $c.CollectionSession.ProfileId|Should -Be 'basic-inventory'
+  $c.CollectionSession.OrganizationId|Should -BeNullOrEmpty
+  $c.CollectionSession.Technician|Should -BeNullOrEmpty
  }
 }

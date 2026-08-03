@@ -7,6 +7,45 @@ agent that collects reliable information from Windows computers and
 exports it as JSON and HTML. It feeds an inventory platform rather than
 replacing it.
 
+## Session-aware inventory records
+
+Hardware inventory now preserves the existing `SchemaVersion 2.0` JSON and also
+creates an import-ready `*-record.json` artifact. The new record carries a
+versioned collection ID, strong asset identity candidates, and the shared session
+context required to consolidate results from many computers.
+
+Before a collection journey, update `CollectionSession` in `config.json`:
+
+```json
+{
+  "CollectionSession": {
+    "SessionId": "SES-20260803-AM-RH",
+    "OrganizationId": "ORG-001",
+    "ProfileId": "basic-inventory",
+    "Technician": "Brandon"
+  }
+}
+```
+
+The launcher builds a `CollectionSession` from that block once at startup and
+forwards only the resolved `SessionId` to both full and quick inventory modes.
+`OrganizationId`, `ProfileId` and `Technician` are session-only context — they
+are never passed to the collector or stored on the `CollectionRecord`. When
+running the collector directly, only the session id is available as a
+parameter:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\Collector_Hardware_Inventory.ps1 `
+  -Mode Full `
+  -SessionId "SES-20260803-AM-RH"
+```
+
+`SES-UNASSIGNED` remains the backward-compatible default, but those records must
+be reviewed before institutional consolidation — running without a real session
+id prints a warning. See [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) and
+[`docs/INSTITUTIONAL_EXCEL_MAPPING.md`](docs/INSTITUTIONAL_EXCEL_MAPPING.md).
+
 ## Windows health diagnostic
 
 The first delivery of the read-only Windows Performance Health Check is available

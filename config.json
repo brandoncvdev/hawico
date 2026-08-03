@@ -9,6 +9,12 @@
   "IncludeDeviceErrors": true,
   "OutputDirectory": ".\\Output",
   "LogDirectory": ".\\Logs",
+  "CollectionSession": {
+    "SessionId": "SES-UNASSIGNED",
+    "OrganizationId": null,
+    "ProfileId": "basic-inventory",
+    "Technician": null
+  },
   "HealthCheck": {
     "SampleDurationSeconds": 60,
     "SampleIntervalSeconds": 1,

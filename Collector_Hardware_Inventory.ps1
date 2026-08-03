@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [ValidateSet("Quick","Full")]
-    [string]$Mode = "Full"
+    [string]$Mode = "Full",
+    [string]$SessionId = "SES-UNASSIGNED"
 )
 
 Set-StrictMode -Version Latest
@@ -18,6 +19,7 @@ $config = Get-Content $configPath -Raw | ConvertFrom-Json
 
 $moduleFiles = @(
     "Common.ps1",
+    "New-InventoryCollectionRecord.ps1",
     "Get-ComputerInfo.ps1",
     "Get-ProcessorInfo.ps1",
     "Get-MemoryInfo.ps1",
@@ -43,10 +45,16 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
 $jsonPath = Join-Path $outputDir "$hostname-$timestamp.json"
+$recordJsonPath = Join-Path $outputDir "$hostname-$timestamp-record.json"
 $htmlPath = Join-Path $outputDir "$hostname-$timestamp.html"
 $logPath = Join-Path $logDir "$hostname-$timestamp.log"
 
-try { Start-Transcript -Path $logPath -Force | Out-Null } catch {}
+try {
+    Start-Transcript -Path $logPath -Force | Out-Null
+}
+catch {
+    Write-Verbose ("No se pudo iniciar la transcripción: {0}" -f $_.Exception.Message)
+}
 
 try {
     Write-Host ""
@@ -86,12 +94,15 @@ try {
         }
     }
 
+    $collectedAt = [datetimeoffset]::Now
+    $scriptUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+
     $inventory = [ordered]@{
         SchemaVersion = "2.0"
         Collection = [ordered]@{
-            CollectedAt = (Get-Date).ToString("o")
+            CollectedAt = $collectedAt.ToString("o")
             Mode = $Mode
-            ScriptUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+            ScriptUser = $scriptUser
         }
         Computer = $computerInfo.Computer
         OperatingSystem = $computerInfo.OperatingSystem
@@ -107,8 +118,19 @@ try {
         DevicesWithErrors = $deviceErrors
     }
 
+    $collectorVersion = Get-CollectorVersion -BasePath $basePath
+
+    $collectionRecord = New-InventoryCollectionRecord `
+        -Inventory $inventory `
+        -SessionId $SessionId `
+        -CollectorVersion $collectorVersion `
+        -CollectedAt $collectedAt
+
     if ([bool]$config.GenerateJSON) {
         $inventory | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
+        $collectionRecord | ConvertTo-Json -Depth 16 | Set-Content `
+            -LiteralPath $recordJsonPath `
+            -Encoding UTF8
     }
 
     if ([bool]$config.GenerateHTML) {
@@ -125,6 +147,7 @@ try {
     Write-Host "Equipo: $env:COMPUTERNAME"
     Write-Host "Modo: $Mode"
     if ([bool]$config.GenerateJSON) { Write-Host "JSON: $jsonPath" }
+    if ([bool]$config.GenerateJSON) { Write-Host "Registro importable: $recordJsonPath" }
     if ([bool]$config.GenerateHTML) { Write-Host "HTML: $htmlPath" }
     Write-Host "LOG: $logPath"
     Write-Host ""
@@ -133,6 +156,7 @@ try {
         Success = $true
         OutputDirectory = $outputDir
         JsonPath = $jsonPath
+        RecordJsonPath = $recordJsonPath
         HtmlPath = $htmlPath
         LogPath = $logPath
     }
@@ -156,5 +180,10 @@ catch {
     }
 }
 finally {
-    try { Stop-Transcript | Out-Null } catch {}
+    try {
+        Stop-Transcript | Out-Null
+    }
+    catch {
+        Write-Verbose ("No se pudo detener la transcripción: {0}" -f $_.Exception.Message)
+    }
 }
