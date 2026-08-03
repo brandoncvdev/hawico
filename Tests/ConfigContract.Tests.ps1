@@ -34,3 +34,12 @@ Describe 'config.json ManualFields contract' {
   $c.ManualFields[4]|Should -Be 'collection.observations'
  }
 }
+
+Describe 'config.json Consolidation contract' {
+ It 'contains the default paths used to build the consolidated workbook' {
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.Consolidation.RecordsPath|Should -Be '.\Output'
+  $c.Consolidation.OutputPath|Should -Be '.\Output\Consolidado.xlsx'
+  $c.Consolidation.HistoryDirectory|Should -Be '.\Output\Historico'
+ }
+}

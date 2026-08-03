@@ -46,6 +46,16 @@ be reviewed before institutional consolidation — running without a real sessio
 id prints a warning. See [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) and
 [`docs/INSTITUTIONAL_EXCEL_MAPPING.md`](docs/INSTITUTIONAL_EXCEL_MAPPING.md).
 
+## Excel consolidation
+
+`Export-InventoryWorkbook.ps1` consolidates every `*-record.json` under
+`config.json`'s `Consolidation.RecordsPath` into a single regenerated
+`.xlsx` workbook (`Inventario`, `Pendientes`, `Resumen`), using the
+[ImportExcel](https://github.com/dfinke/ImportExcel) module
+(`Install-Module ImportExcel -Scope CurrentUser -Force`). See
+[`docs/EXCEL_ENGINE.md`](docs/EXCEL_ENGINE.md) for the MVP scope, the
+columns available today vs. pending, and the regeneration policy.
+
 ## Windows health diagnostic
 
 The first delivery of the read-only Windows Performance Health Check is available

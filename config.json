@@ -22,6 +22,11 @@
     "asset.assetTag",
     "collection.observations"
   ],
+  "Consolidation": {
+    "RecordsPath": ".\\Output",
+    "OutputPath": ".\\Output\\Consolidado.xlsx",
+    "HistoryDirectory": ".\\Output\\Historico"
+  },
   "HealthCheck": {
     "SampleDurationSeconds": 60,
     "SampleIntervalSeconds": 1,
