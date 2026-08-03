@@ -27,6 +27,10 @@
     "OutputPath": ".\\Output\\Consolidado.xlsx",
     "HistoryDirectory": ".\\Output\\Historico"
   },
+  "Administration": {
+    "RecordsPath": ".\\Output",
+    "BasePath": "."
+  },
   "HealthCheck": {
     "SampleDurationSeconds": 60,
     "SampleIntervalSeconds": 1,

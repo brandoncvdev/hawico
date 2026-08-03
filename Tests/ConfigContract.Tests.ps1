@@ -43,3 +43,11 @@ Describe 'config.json Consolidation contract' {
   $c.Consolidation.HistoryDirectory|Should -Be '.\Output\Historico'
  }
 }
+
+Describe 'config.json Administration contract' {
+ It 'contains the default paths used to import records into the local asset store' {
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.Administration.RecordsPath|Should -Be '.\Output'
+  $c.Administration.BasePath|Should -Be '.'
+ }
+}

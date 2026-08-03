@@ -56,6 +56,17 @@ id prints a warning. See [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) and
 [`docs/EXCEL_ENGINE.md`](docs/EXCEL_ENGINE.md) for the MVP scope, the
 columns available today vs. pending, and the regeneration policy.
 
+## Local administration
+
+`Import-InventoryRecords.ps1` imports every `*-record.json` under
+`config.json`'s `Administration.RecordsPath` into a local, plain-JSON asset
+store (`Administracion/`), assigning the permanent `AssetId` for the first
+time, matching returning equipment by serial/UUID, and sorting each record
+into `NuevosEquipos`, `EquiposActualizados`, `PosiblesDuplicados`,
+`Conflictos` or `ErroresRecoleccion`. See
+[`docs/ADMINISTRATION.md`](docs/ADMINISTRATION.md) for the storage format,
+the import trays, and why there is no SQLite dependency yet.
+
 ## Windows health diagnostic
 
 The first delivery of the read-only Windows Performance Health Check is available
