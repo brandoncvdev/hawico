@@ -51,3 +51,10 @@ Describe 'config.json Administration contract' {
   $c.Administration.BasePath|Should -Be '.'
  }
 }
+
+Describe 'config.json OrganizationPackages contract' {
+ It 'contains the default base path used to resolve organization packages' {
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.OrganizationPackages.BasePath|Should -Be '.\Config\Organizations'
+ }
+}

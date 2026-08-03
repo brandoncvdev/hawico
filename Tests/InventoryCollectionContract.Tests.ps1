@@ -21,6 +21,10 @@ Describe 'Collector_Hardware_Inventory.ps1 collection record contract' {
         $script | Should -Match '\$config\.ManualFields'
     }
 
+    It 'accepts pre-resolved manual field keys from the launcher, falling back to config.json when absent' {
+        $script | Should -Match '\[AllowNull\(\)\]\[string\[\]\]\$ManualFieldKeys'
+    }
+
     It 'passes the captured manual fields into the collection record' {
         $script | Should -Match '-ManualFields\s+\$manualFields'
     }

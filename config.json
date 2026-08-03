@@ -31,6 +31,9 @@
     "RecordsPath": ".\\Output",
     "BasePath": "."
   },
+  "OrganizationPackages": {
+    "BasePath": ".\\Config\\Organizations"
+  },
   "HealthCheck": {
     "SampleDurationSeconds": 60,
     "SampleIntervalSeconds": 1,

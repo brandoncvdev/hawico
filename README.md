@@ -67,6 +67,18 @@ into `NuevosEquipos`, `EquiposActualizados`, `PosiblesDuplicados`,
 [`docs/ADMINISTRATION.md`](docs/ADMINISTRATION.md) for the storage format,
 the import trays, and why there is no SQLite dependency yet.
 
+## Organization packages
+
+`config.json.CollectionSession.OrganizationId`/`ProfileId` can point at a real
+package under `Config/Organizations/<organizationId>/` (a usable
+`org-example` package with a `basic-inventory` profile ships in the repo).
+`Start-Inventory.ps1` resolves the active profile's manual fields from that
+package and only falls back to `config.json.ManualFields` when no
+organization is configured. See
+[`docs/ORGANIZATION_PACKAGES.md`](docs/ORGANIZATION_PACKAGES.md) for the
+package layout and what is loaded but not wired into capture yet (catalogs,
+custom fields).
+
 ## Windows health diagnostic
 
 The first delivery of the read-only Windows Performance Health Check is available

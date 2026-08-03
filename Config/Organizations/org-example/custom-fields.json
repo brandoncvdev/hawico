@@ -1,0 +1,21 @@
+{
+  "fields": [
+    {
+      "key": "assignment.user.fullName",
+      "label": "Nombre completo del usuario",
+      "type": "text",
+      "required": false,
+      "allowSkip": true,
+      "askDuringCollection": true,
+      "reusePreviousValue": true
+    },
+    {
+      "key": "asset.assetTag",
+      "label": "Número patrimonial",
+      "type": "text",
+      "required": false,
+      "allowSkip": true,
+      "askDuringCollection": true
+    }
+  ]
+}

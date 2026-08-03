@@ -3,7 +3,8 @@ param(
     [ValidateSet("Quick","Full")]
     [string]$Mode = "Full",
     [string]$SessionId = "SES-UNASSIGNED",
-    [AllowNull()][string]$Technician = $null
+    [AllowNull()][string]$Technician = $null,
+    [AllowNull()][string[]]$ManualFieldKeys = $null
 )
 
 Set-StrictMode -Version Latest
@@ -120,13 +121,24 @@ try {
         DevicesWithErrors = $deviceErrors
     }
 
-    $manualFieldKeys = @()
-    if ($config.PSObject.Properties.Name -contains "ManualFields" -and $null -ne $config.ManualFields) {
-        $manualFieldKeys = @($config.ManualFields)
+    # The launcher resolves the active organization profile's manual fields
+    # and passes them in as -ManualFieldKeys. Direct standalone invocation
+    # (no launcher involved) still works: it falls back to config.json's
+    # flat ManualFields list, exactly as before organization packages
+    # existed.
+    $resolvedManualFieldKeys = if ($null -ne $ManualFieldKeys) {
+        @($ManualFieldKeys)
+    }
+    else {
+        $fallbackManualFieldKeys = @()
+        if ($config.PSObject.Properties.Name -contains "ManualFields" -and $null -ne $config.ManualFields) {
+            $fallbackManualFieldKeys = @($config.ManualFields)
+        }
+        $fallbackManualFieldKeys
     }
 
-    $manualFields = if ($manualFieldKeys.Count -gt 0) {
-        Read-InventoryManualCapture -FieldKeys $manualFieldKeys -Technician $Technician
+    $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
+        Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician
     }
     else {
         @()

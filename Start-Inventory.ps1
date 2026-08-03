@@ -19,6 +19,7 @@ try {
 
     . (Join-Path $basePath "Modules\Common.ps1")
     . (Join-Path $basePath "Modules\New-InventoryCollectionSession.ps1")
+    . (Join-Path $basePath "Modules\InventoryOrganizationPackage.ps1")
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
     $sessionParameters = @{
@@ -38,9 +39,26 @@ try {
 
     $collectionSession = New-InventoryCollectionSession @sessionParameters -WarningAction Continue
 
+    # Resolve manual fields from the active organization's profile, if one
+    # is configured; otherwise config.json's flat ManualFields list is used
+    # as-is (unchanged backward-compatible behavior).
+    $organizationPackagesBasePath = ".\Config\Organizations"
+    if ($null -ne $config.OrganizationPackages -and
+        $config.OrganizationPackages.PSObject.Properties.Name -contains "BasePath") {
+        $organizationPackagesBasePath = $config.OrganizationPackages.BasePath
+    }
+    $resolvedOrganizationPackagesBasePath = Join-Path $basePath ($organizationPackagesBasePath -replace '^[.][\\/]', '')
+
+    $manualFieldKeys = Get-InventoryProfileManualFields `
+        -BasePath $resolvedOrganizationPackagesBasePath `
+        -OrganizationId $collectionSession.OrganizationId `
+        -ProfileId $collectionSession.ProfileId `
+        -FallbackFields @($config.ManualFields)
+
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
         Technician = $collectionSession.Technician
+        ManualFieldKeys = $manualFieldKeys
     }
 
     function Wait-MenuInput {
