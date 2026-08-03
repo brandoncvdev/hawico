@@ -27,6 +27,33 @@ function Get-SafeString {
     return $text
 }
 
+function Get-CollectorVersion {
+    param(
+        [Parameter(Mandatory)][string]$BasePath,
+        [string]$DefaultVersion = '0.0.0'
+    )
+
+    $manifestPath = Join-Path $BasePath 'manifest.json'
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        return $DefaultVersion
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        Write-Warning ("No se pudo leer manifest.json: {0}" -f $_.Exception.Message)
+        return $DefaultVersion
+    }
+
+    $version = Get-SafeString $manifest.CollectorVersion
+    if ($null -eq $version) {
+        return $DefaultVersion
+    }
+
+    return $version
+}
+
 function Get-CimDataSafe {
     param(
         [Parameter(Mandatory)][string]$ClassName,
