@@ -101,6 +101,49 @@ CollectionSession
   (the `config.json` default), `Status` is `Unassigned` and the launcher emits a
   `Write-Warning` telling the technician the capture must be reviewed before
   institutional consolidation. Any other `SessionId` yields `Status = Active`.
-- `Collector_Hardware_Inventory.ps1` itself only accepts `-SessionId`
-  (defaulting to `SES-UNASSIGNED` for backward-compatible direct execution); it
-  no longer accepts `-OrganizationId`, `-ProfileId` or `-Technician`.
+- `Collector_Hardware_Inventory.ps1` itself only accepts `-SessionId` and
+  `-Technician` (see "Manual capture" below for why `-Technician` came back);
+  it does not accept `-OrganizationId` or `-ProfileId`.
+
+## Manual capture
+
+`Modules/New-InventoryManualCapture.ps1` implements the compact manual capture
+from the plan's `08-Manual-Capture.md`: the collector asks only for the fields
+listed in `config.json`'s `ManualFields` array, and pressing Enter (an empty or
+whitespace-only answer) skips the field instead of forcing a value.
+
+```text
+FieldValue
+├── Key
+├── Value
+├── Source: VisitCapture | ManualReview
+├── CapturedAt
+├── CapturedBy
+├── Confidence: Unconfirmed | Confirmed
+└── Status: Present
+```
+
+- `New-InventoryManualFieldValue` is the pure builder: given a raw string, it
+  returns `$null` when the trimmed value is empty (the field was skipped) or a
+  `FieldValue` (shape above) otherwise. `Source` defaults to `VisitCapture` and
+  `Confidence` to `Unconfirmed`, matching a first-visit capture; both can be
+  overridden later (e.g. `ManualReview` / `Confirmed`) for a corrected value,
+  per `08-Manual-Capture.md`'s revision example.
+- `Read-InventoryManualCapture` is the orchestrator: it walks `-FieldKeys` in
+  order, prompts for each one (via an injectable `-Prompter` scriptblock,
+  defaulting to `Read-Host`), and returns only the fields that were actually
+  answered — skipped fields are never added to the result.
+- `config.json`'s `ManualFields` array is a **hardcoded list**, not yet the
+  profile catalog described in the plan (`config/profiles/*.json`,
+  `profileId → manualFields`). Today it always contains the same five fields
+  from the plan's `basic-inventory` example profile
+  (`assignment.user.fullName`, `assignment.organizationUnitId`,
+  `assignment.locationId`, `asset.assetTag`, `collection.observations`).
+  Loading per-organization profile packages is Phase 4 (agnostic
+  configuration) work and is intentionally not implemented yet.
+- `-Technician` was reintroduced as a `Collector_Hardware_Inventory.ps1`
+  parameter **only** to stamp `CapturedBy` on each `FieldValue`. It is never
+  written back into the `CollectionSession` object or the `CollectionRecord`
+  itself — those still only carry the scalar `SessionId` (see above). The
+  launcher forwards `$collectionSession.Technician` (resolved once at startup)
+  to both `-Mode Full` and `-Mode Quick` via `$collectionArguments`.

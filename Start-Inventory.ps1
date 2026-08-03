@@ -40,6 +40,7 @@ try {
 
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
+        Technician = $collectionSession.Technician
     }
 
     function Wait-MenuInput {

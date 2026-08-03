@@ -15,6 +15,13 @@
     "ProfileId": "basic-inventory",
     "Technician": null
   },
+  "ManualFields": [
+    "assignment.user.fullName",
+    "assignment.organizationUnitId",
+    "assignment.locationId",
+    "asset.assetTag",
+    "collection.observations"
+  ],
   "HealthCheck": {
     "SampleDurationSeconds": 60,
     "SampleIntervalSeconds": 1,

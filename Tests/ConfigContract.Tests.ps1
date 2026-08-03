@@ -22,3 +22,15 @@ Describe 'config.json CollectionSession contract' {
   $c.CollectionSession.Technician|Should -BeNullOrEmpty
  }
 }
+
+Describe 'config.json ManualFields contract' {
+ It 'contains the five basic-inventory manual fields in institutional order' {
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.ManualFields.Count|Should -Be 5
+  $c.ManualFields[0]|Should -Be 'assignment.user.fullName'
+  $c.ManualFields[1]|Should -Be 'assignment.organizationUnitId'
+  $c.ManualFields[2]|Should -Be 'assignment.locationId'
+  $c.ManualFields[3]|Should -Be 'asset.assetTag'
+  $c.ManualFields[4]|Should -Be 'collection.observations'
+ }
+}

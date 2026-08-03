@@ -22,4 +22,8 @@ Describe 'Start-Inventory.ps1 collection session forwarding' {
         $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*SessionId\s*=\s*\$collectionSession\.SessionId[^}]*\}'
         $script | Should -Not -Match '\$collectionArguments\s*=\s*@\{[^}]*OrganizationId'
     }
+
+    It 'forwards the resolved technician alongside the session id for manual capture attribution' {
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*SessionId\s*=\s*\$collectionSession\.SessionId[^}]*Technician\s*=\s*\$collectionSession\.Technician[^}]*\}'
+    }
 }

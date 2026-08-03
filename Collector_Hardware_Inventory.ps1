@@ -2,7 +2,8 @@
 param(
     [ValidateSet("Quick","Full")]
     [string]$Mode = "Full",
-    [string]$SessionId = "SES-UNASSIGNED"
+    [string]$SessionId = "SES-UNASSIGNED",
+    [AllowNull()][string]$Technician = $null
 )
 
 Set-StrictMode -Version Latest
@@ -20,6 +21,7 @@ $config = Get-Content $configPath -Raw | ConvertFrom-Json
 $moduleFiles = @(
     "Common.ps1",
     "New-InventoryCollectionRecord.ps1",
+    "New-InventoryManualCapture.ps1",
     "Get-ComputerInfo.ps1",
     "Get-ProcessorInfo.ps1",
     "Get-MemoryInfo.ps1",
@@ -118,13 +120,26 @@ try {
         DevicesWithErrors = $deviceErrors
     }
 
+    $manualFieldKeys = @()
+    if ($config.PSObject.Properties.Name -contains "ManualFields" -and $null -ne $config.ManualFields) {
+        $manualFieldKeys = @($config.ManualFields)
+    }
+
+    $manualFields = if ($manualFieldKeys.Count -gt 0) {
+        Read-InventoryManualCapture -FieldKeys $manualFieldKeys -Technician $Technician
+    }
+    else {
+        @()
+    }
+
     $collectorVersion = Get-CollectorVersion -BasePath $basePath
 
     $collectionRecord = New-InventoryCollectionRecord `
         -Inventory $inventory `
         -SessionId $SessionId `
         -CollectorVersion $collectorVersion `
-        -CollectedAt $collectedAt
+        -CollectedAt $collectedAt `
+        -ManualFields $manualFields
 
     if ([bool]$config.GenerateJSON) {
         $inventory | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $jsonPath -Encoding UTF8

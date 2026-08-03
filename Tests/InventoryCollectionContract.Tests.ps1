@@ -3,16 +3,26 @@ Describe 'Collector_Hardware_Inventory.ps1 collection record contract' {
         $script = Get-Content "$PSScriptRoot/../Collector_Hardware_Inventory.ps1" -Raw
     }
 
-    It 'accepts a collection session id without requiring organization or technician context' {
+    It 'accepts a collection session id and a technician for manual capture attribution, without organization or profile context' {
         $script | Should -Match '\[string\]\$SessionId'
+        $script | Should -Match '\[AllowNull\(\)\]\[string\]\$Technician'
         $script | Should -Not -Match '\$OrganizationId'
         $script | Should -Not -Match '\$ProfileId'
-        $script | Should -Not -Match '\$Technician'
     }
 
     It 'loads and creates the versioned collection record' {
         $script | Should -Match 'New-InventoryCollectionRecord\.ps1'
         $script | Should -Match 'New-InventoryCollectionRecord'
+    }
+
+    It 'loads the manual capture module and prompts only the configured manual fields' {
+        $script | Should -Match 'New-InventoryManualCapture\.ps1'
+        $script | Should -Match 'Read-InventoryManualCapture'
+        $script | Should -Match '\$config\.ManualFields'
+    }
+
+    It 'passes the captured manual fields into the collection record' {
+        $script | Should -Match '-ManualFields\s+\$manualFields'
     }
 
     It 'writes a distinct importable record without replacing legacy evidence' {
