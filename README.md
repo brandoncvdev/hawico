@@ -7,6 +7,28 @@ agent that collects reliable information from Windows computers and
 exports it as JSON and HTML. It feeds an inventory platform rather than
 replacing it.
 
+## Starting the tools
+
+On real machines, double-click the `.cmd` launcher instead of opening the
+`.ps1` scripts directly:
+
+- **`Iniciar-Recolector.cmd`** on field equipment — launches `Bootstrap.ps1`,
+  which requests administrator elevation and opens `Start-Inventory.ps1`'s
+  menu.
+- **`Iniciar-Administracion.cmd`** on the support machine — launches
+  `Start-Administration.ps1`'s menu directly.
+
+The `.ps1` scripts are not meant to be double-clicked (or run via Windows'
+"Run with PowerShell") directly in Windows: PowerShell's default execution
+policy blocks unsigned scripts, and — depending on how the window was
+opened — an unhandled error can close the console before anyone can read
+it. The `.cmd` files exist specifically to avoid both problems: they set
+`-ExecutionPolicy Bypass` for that single process and use `%~dp0` so they
+work regardless of which drive letter the folder ends up on (e.g. a USB
+stick), and every menu script blocks with `Read-Host` on both normal exit
+and on error, so the window never disappears before its message can be
+read.
+
 ## Session-aware inventory records
 
 Hardware inventory now preserves the existing `SchemaVersion 2.0` JSON and also
