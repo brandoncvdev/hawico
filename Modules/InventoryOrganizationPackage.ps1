@@ -195,6 +195,44 @@ function Get-InventoryDepartmentUnitCatalog {
     return ,@(@($parsed.units) | Where-Object { $null -ne $_ })
 }
 
+function Get-InventoryAutoDetectedOrganizationId {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads existing organization folders without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$BasePath,
+        [AllowNull()][string[]]$ExcludeOrganizationIds = @('org-example')
+    )
+
+    # config.json's CollectionSession.OrganizationId being unset used to mean
+    # "no catalog, free text only" even when a real organization package was
+    # already sitting on disk — the technician had to hand-edit JSON before
+    # the catalog they just copied over would ever be used. When exactly one
+    # real candidate folder exists (org-example is never a candidate: it is
+    # the reference format, not a real institution), use it automatically.
+    # Zero or more than one candidate is intentionally left unresolved rather
+    # than guessing which one is "the" institution.
+    if (-not (Test-Path -LiteralPath $BasePath)) {
+        return $null
+    }
+
+    $excluded = @(@($ExcludeOrganizationIds) | Where-Object { $null -ne $_ } | ForEach-Object { $_.ToLowerInvariant() })
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $BasePath -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $excluded -notcontains $_.Name.ToLowerInvariant() } |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'organization.json') }
+    )
+
+    if ($candidates.Count -ne 1) {
+        return $null
+    }
+
+    return $candidates[0].Name
+}
+
 function Get-InventoryCustomFieldDefinitions {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',

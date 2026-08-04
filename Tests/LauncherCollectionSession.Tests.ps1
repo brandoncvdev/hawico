@@ -77,4 +77,12 @@
         $script | Should -Match '"9\.\s+Cambiar contexto de esta visita'
         $script | Should -Match '(?s)"9"\s*\{.*?Read-InventoryVisitContext'
     }
+
+    It 'auto-detects the organization package when config.json does not pin one explicitly, before building the session' {
+        $script | Should -Match 'Get-InventoryAutoDetectedOrganizationId'
+        # Must run before New-InventoryCollectionSession is called, so an
+        # auto-detected OrganizationId actually reaches $collectionSession
+        # instead of arriving too late to matter.
+        $script | Should -Match '(?s)Get-InventoryAutoDetectedOrganizationId.*?New-InventoryCollectionSession\s+@sessionParameters'
+    }
 }

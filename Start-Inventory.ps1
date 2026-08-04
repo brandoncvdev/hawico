@@ -23,6 +23,17 @@ try {
     . (Join-Path $basePath "Modules\New-InventoryManualCapture.ps1")
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+
+    # Resolve manual fields from the active organization's profile, if one
+    # is configured; otherwise config.json's flat ManualFields list is used
+    # as-is (unchanged backward-compatible behavior).
+    $organizationPackagesBasePath = ".\Config\Organizations"
+    if ($null -ne $config.OrganizationPackages -and
+        $config.OrganizationPackages.PSObject.Properties.Name -contains "BasePath") {
+        $organizationPackagesBasePath = $config.OrganizationPackages.BasePath
+    }
+    $resolvedOrganizationPackagesBasePath = Join-Path $basePath ($organizationPackagesBasePath -replace '^[.][\\/]', '')
+
     $sessionParameters = @{
         SessionId = "SES-UNASSIGNED"
         OrganizationId = $null
@@ -38,17 +49,19 @@ try {
         }
     }
 
-    $collectionSession = New-InventoryCollectionSession @sessionParameters -WarningAction Continue
-
-    # Resolve manual fields from the active organization's profile, if one
-    # is configured; otherwise config.json's flat ManualFields list is used
-    # as-is (unchanged backward-compatible behavior).
-    $organizationPackagesBasePath = ".\Config\Organizations"
-    if ($null -ne $config.OrganizationPackages -and
-        $config.OrganizationPackages.PSObject.Properties.Name -contains "BasePath") {
-        $organizationPackagesBasePath = $config.OrganizationPackages.BasePath
+    # config.json not pinning an OrganizationId used to mean "no catalog,
+    # free text only" even with a real organization package already sitting
+    # on disk — auto-detect it instead of requiring a manual edit before the
+    # catalog the technician just copied over would ever be used. An
+    # explicit OrganizationId in config.json always wins over auto-detection.
+    if ($null -eq (Get-SafeString $sessionParameters.OrganizationId)) {
+        $autoDetectedOrganizationId = Get-InventoryAutoDetectedOrganizationId -BasePath $resolvedOrganizationPackagesBasePath
+        if ($null -ne $autoDetectedOrganizationId) {
+            $sessionParameters.OrganizationId = $autoDetectedOrganizationId
+        }
     }
-    $resolvedOrganizationPackagesBasePath = Join-Path $basePath ($organizationPackagesBasePath -replace '^[.][\\/]', '')
+
+    $collectionSession = New-InventoryCollectionSession @sessionParameters -WarningAction Continue
 
     $manualFieldKeys = Get-InventoryProfileManualFields `
         -BasePath $resolvedOrganizationPackagesBasePath `

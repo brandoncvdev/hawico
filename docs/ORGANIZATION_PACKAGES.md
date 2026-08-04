@@ -110,6 +110,18 @@ administración central" (`docs/04-Architecture.md`) keeps living:
 1. `Start-Inventory.ps1` builds the `CollectionSession` from
    `config.json.CollectionSession` (`OrganizationId`, `ProfileId`) — unchanged
    from earlier phases, no new config key duplicates this.
+
+   Before that, if `CollectionSession.OrganizationId` is null/empty,
+   `Get-InventoryAutoDetectedOrganizationId -BasePath <resolved
+   OrganizationPackages.BasePath>` looks for exactly one real organization
+   folder under `Config/Organizations/` (`org-example` is never a candidate —
+   it's the reference format, not a real institution) and uses it
+   automatically. This exists so dropping a real organization package onto a
+   machine is enough on its own — no `config.json` edit required — for the
+   common single-institution case. Zero or more than one real candidate
+   folder leaves `OrganizationId` unresolved rather than guessing; an
+   explicit `OrganizationId` already set in `config.json` always wins over
+   auto-detection.
 2. It calls `Get-InventoryProfileManualFields -BasePath <resolved
    OrganizationPackages.BasePath> -OrganizationId $collectionSession.OrganizationId
    -ProfileId $collectionSession.ProfileId -FallbackFields @($config.ManualFields)`.

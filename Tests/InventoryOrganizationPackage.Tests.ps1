@@ -352,3 +352,61 @@ Describe 'The real Config/Organizations/org-example package shipped in this repo
         @($customFields).Count | Should -BeGreaterThan 0
     }
 }
+
+Describe 'Get-InventoryAutoDetectedOrganizationId' {
+    It 'returns null when the base path does not exist yet' {
+        $missingPath = Join-Path $TestDrive 'does-not-exist'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $missingPath
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when there are no organization folders at all' {
+        $emptyBase = Join-Path $TestDrive 'empty-base'
+        New-Item -ItemType Directory -Force -Path $emptyBase | Out-Null
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $emptyBase
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'ignores org-example and returns null when it is the only folder present' {
+        $base = Join-Path $TestDrive 'only-example'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'org-example'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'auto-detects the single real organization folder, ignoring org-example alongside it' {
+        $base = Join-Path $TestDrive 'one-real-org'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'org-example'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'mi-institucion'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -Be 'mi-institucion'
+    }
+
+    It 'returns null (ambiguous) when there is more than one real organization folder' {
+        $base = Join-Path $TestDrive 'two-real-orgs'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'institucion-a'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'institucion-b'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'ignores a folder that has no organization.json (not a real package)' {
+        $base = Join-Path $TestDrive 'stray-folder'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'mi-institucion'
+        New-Item -ItemType Directory -Force -Path (Join-Path $base 'not-a-package') | Out-Null
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -Be 'mi-institucion'
+    }
+}
