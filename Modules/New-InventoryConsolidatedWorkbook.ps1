@@ -294,9 +294,18 @@ function Export-InventoryConsolidatedWorkbook {
     $records = @($collected.Records)
     $skipped = @($collected.Skipped)
 
+    # No extra @() around the two calls below: Get-InventoryPendingReviewRows
+    # and Get-InventoryConsolidationSummary already return a correctly-flat
+    # array via their own `,@()` return guard. Wrapping an already
+    # comma-guarded call in another @() re-nests it into a 1-element array
+    # whose sole element is the real array — `.Count` then always reports 1
+    # regardless of the actual row count (piping the nested result into
+    # Export-Excel still happened to work, since `|` auto-enumerates one
+    # level, which is why this went unnoticed: it only corrupted the
+    # PendingCount reported back to the caller, not the sheet content).
     $inventoryRows = @($records | ForEach-Object { ConvertTo-InventoryWorkbookRow -Record $_ })
-    $pendingRows = @(Get-InventoryPendingReviewRows -Records $records)
-    $summaryRows = @(Get-InventoryConsolidationSummary -Records $records)
+    $pendingRows = Get-InventoryPendingReviewRows -Records $records
+    $summaryRows = Get-InventoryConsolidationSummary -Records $records
 
     if (Test-Path -LiteralPath $OutputPath) {
         Remove-Item -LiteralPath $OutputPath -Force

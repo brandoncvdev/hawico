@@ -4,7 +4,8 @@ param(
     [string]$Mode = "Full",
     [string]$SessionId = "SES-UNASSIGNED",
     [AllowNull()][string]$Technician = $null,
-    [AllowNull()][string[]]$ManualFieldKeys = $null
+    [AllowNull()][string[]]$ManualFieldKeys = $null,
+    [AllowNull()][object[]]$OrganizationUnits = $null
 )
 
 Set-StrictMode -Version Latest
@@ -137,8 +138,11 @@ try {
         $fallbackManualFieldKeys
     }
 
+    $resolvedOrganizationUnits = if ($null -ne $OrganizationUnits) { @($OrganizationUnits) } else { @() }
+
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
-        Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician
+        Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
+            -OrganizationUnits $resolvedOrganizationUnits
     }
     else {
         @()

@@ -38,4 +38,9 @@
     It 'forwards the resolved manual field keys to the collector' {
         $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*ManualFieldKeys\s*=\s*\$manualFieldKeys[^}]*\}'
     }
+
+    It 'loads the organization unit catalog and forwards it to the collector' {
+        $script | Should -Match 'Get-InventoryOrganizationUnitCatalog'
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*OrganizationUnits\s*=\s*\$organizationUnits[^}]*\}'
+    }
 }

@@ -55,10 +55,18 @@ try {
         -ProfileId $collectionSession.ProfileId `
         -FallbackFields @($config.ManualFields)
 
+    # doc07-Catalog-System.md: when the active organization has an
+    # organization-unit catalog, the technician picks assignment.organizationUnitId
+    # from it during capture instead of typing free text.
+    $organizationUnits = Get-InventoryOrganizationUnitCatalog `
+        -BasePath $resolvedOrganizationPackagesBasePath `
+        -OrganizationId $collectionSession.OrganizationId
+
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
         Technician = $collectionSession.Technician
         ManualFieldKeys = $manualFieldKeys
+        OrganizationUnits = $organizationUnits
     }
 
     function Wait-MenuInput {

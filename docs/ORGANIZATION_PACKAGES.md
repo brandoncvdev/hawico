@@ -12,13 +12,17 @@ fallback.
 - Organization definitions, profiles, the organization-unit catalog and
   custom-field definitions are **loaded** and available via
   `Modules/InventoryOrganizationPackage.ps1`.
-- Only the **active profile's `manualFields`** are actually consumed today
-  (by `Read-InventoryManualCapture`, unchanged — it still prompts free text).
-- The organization-unit catalog and custom-field definitions are loaded but
-  **not yet wired into any interactive selector** — `Read-InventoryManualCapture`
-  keeps asking free text for every field, including
-  `assignment.organizationUnitId`. Turning the catalog into a pick-list during
-  capture is Fase 5 (interfaz administrativa) work.
+- The **active profile's `manualFields`** are consumed by
+  `Read-InventoryManualCapture` to decide which fields to ask at all.
+- The **organization-unit catalog** is wired into capture: when one is
+  configured, `assignment.organizationUnitId` is answered by picking from a
+  numbered menu instead of typing free text (see "Organization unit
+  selection" below). Every other manual field, and `assignment.organizationUnitId`
+  itself when no catalog is configured, still prompts free text.
+- **Custom-field definitions** (`custom-fields.json`) are loaded but not yet
+  consumed anywhere — there is no per-field validation, type, or label
+  rendering driven by them yet. That remains Fase 5 (interfaz
+  administrativa) work.
 - `rules.json` and `excel-mapping.json` (also mentioned in `docs/14-Configuration.md`)
   are **not implemented** — nothing in the codebase would consume them yet
   (evaluation rules don't exist until `docs/09-Memory-Assessment.md` is
@@ -123,6 +127,41 @@ error condition.
 without the launcher, still works exactly as before: with no
 `-ManualFieldKeys` supplied, it falls back to reading `config.json.ManualFields`
 itself, unchanged.
+
+## Organization unit selection
+
+`Start-Inventory.ps1` also resolves `$organizationUnits` via
+`Get-InventoryOrganizationUnitCatalog -BasePath ... -OrganizationId
+$collectionSession.OrganizationId` and forwards it as
+`$collectionArguments.OrganizationUnits`. `Collector_Hardware_Inventory.ps1`
+passes it straight through to `Read-InventoryManualCapture -OrganizationUnits`.
+
+Inside `Modules/New-InventoryManualCapture.ps1`:
+
+- `ConvertTo-InventoryOrganizationUnitMenu -Units` (pure) flattens the
+  catalog's parent/child `units` array into an ordered `{Id; Name; Depth}`
+  list — roots first (by `sortOrder`), each one immediately followed by its
+  own children (by `sortOrder`, recursively), matching the nested example
+  in `docs/07-Catalog-System.md`. It guards against a malformed catalog
+  (duplicate `id`, a `parentId` chain that loops back on itself) with a
+  visited-id set: a repeated `id` cuts that branch short instead of hanging
+  the collector.
+- `Read-InventoryOrganizationUnitSelection -Units -Prompter` shows that menu
+  with `Write-Host` (indented by `Depth`), asks for a number through the
+  same `-Prompter` scriptblock `Read-InventoryManualCapture` already uses,
+  and re-prompts on anything that isn't a valid option number until the
+  technician picks one or presses Enter to skip. With no units at all it
+  returns `$null` immediately without printing anything.
+- `Read-InventoryManualCapture` calls this **only** for the
+  `assignment.organizationUnitId` key, and only when `-OrganizationUnits`
+  was actually supplied and non-empty; every other key is untouched.
+
+The stored `FieldValue.Value` is the selected unit's **`name`** (e.g.
+`"Recursos Humanos"`), not its catalog `id` (e.g. `"dept-hr"`) — `FieldValue`
+(`docs/06-Data-Model.md`) only has one text `value`, and the Excel
+`DIRECCION` column (`docs/INSTITUTIONAL_EXCEL_MAPPING.md`) needs the
+readable name. This is exactly what a technician would have typed by hand
+before, just without typos now.
 
 ## Configuration
 

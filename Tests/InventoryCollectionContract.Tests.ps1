@@ -25,6 +25,11 @@
         $script | Should -Match '\[AllowNull\(\)\]\[string\[\]\]\$ManualFieldKeys'
     }
 
+    It 'accepts pre-resolved organization units for the catalog-based organizationUnitId selection' {
+        $script | Should -Match '\[AllowNull\(\)\]\[object\[\]\]\$OrganizationUnits'
+        $script | Should -Match '-OrganizationUnits'
+    }
+
     It 'passes the captured manual fields into the collection record' {
         $script | Should -Match '-ManualFields\s+\$manualFields'
     }

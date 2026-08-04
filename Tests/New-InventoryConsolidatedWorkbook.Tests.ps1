@@ -368,6 +368,27 @@ Describe 'Export-InventoryConsolidatedWorkbook' -Skip:(-not (Get-Module -ListAva
         Test-Path -LiteralPath $result.HistoryPath | Should -BeTrue
     }
 
+    It 'reports the real PendingCount when more than one record needs review (not always 1)' {
+        $recordsDir = Join-Path $TestDrive 'export-pending-count'
+        New-Item -ItemType Directory -Path $recordsDir -Force | Out-Null
+
+        (New-FixtureRecord -CollectionId 'COL-PENDING-1' -AssetStatus 'NeedsReview' -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
+            ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $recordsDir 'PC-01-record.json') -Encoding UTF8
+        (New-FixtureRecord -CollectionId 'COL-PENDING-2' -AssetStatus 'NeedsReview' -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
+            ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $recordsDir 'PC-02-record.json') -Encoding UTF8
+
+        $outputPath = Join-Path $TestDrive 'Consolidado-PendingCount.xlsx'
+
+        $result = Export-InventoryConsolidatedWorkbook -RecordsPath $recordsDir -OutputPath $outputPath
+
+        $result.PendingCount | Should -Be 2
+
+        $pendientesRows = @(Import-Excel -Path $outputPath -WorksheetName 'Pendientes')
+        $pendientesRows.Count | Should -Be 2
+    }
+
     It 'regenerates the workbook from scratch instead of accumulating stale sheets' {
         $recordsDir = Join-Path $TestDrive 'export-regen'
         New-Item -ItemType Directory -Path $recordsDir -Force | Out-Null
