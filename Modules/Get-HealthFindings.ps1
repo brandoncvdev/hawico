@@ -207,7 +207,7 @@ function Get-HealthFinding {
             Add-HealthFinding -List $findings -Id 'EVT-003' -Category 'Events' -Severity 'Medium' -Title 'Repeated application failures' -Description 'At least five application error or hang events occurred in the configured period.' -Evidence ([ordered]@{ ApplicationFailureCount = $applicationFailureCount }) -RecommendationId 'REC-EVT-003' -Impact 8
         }
     }
-    return @($findings | ForEach-Object { $_ })
+    return ,@($findings | ForEach-Object { $_ })
 }
 
 function Get-HealthRecommendation {

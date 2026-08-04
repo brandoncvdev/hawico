@@ -125,7 +125,7 @@ function Invoke-HealthCheck {
         }
     }
 
-    $findings = @(Get-HealthFinding -Metrics $metrics -Thresholds $healthConfig)
+    $findings = Get-HealthFinding -Metrics $metrics -Thresholds $healthConfig
     $recommendations = @(Get-HealthRecommendation -Findings $findings)
     $performanceAvailable = $performance.Status -in @('Collected', 'Partial') -and [int]$performance.ValidSampleCount -gt 0
     $storageAvailable = $storage.Status -in @('Collected', 'Partial')

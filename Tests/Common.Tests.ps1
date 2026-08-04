@@ -1,5 +1,36 @@
 ﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Common.ps1"
+    if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+        function Get-CimInstance { param($Namespace, $ClassName, $Filter) }
+    }
+}
+
+Describe 'Get-CimDataSafe' {
+    It 'returns a real array, not a bare object, when exactly one instance is found (no filter)' {
+        Mock Get-CimInstance { [pscustomobject]@{ Name = 'Win32_OperatingSystem' } }
+
+        $result = Get-CimDataSafe -ClassName 'Win32_OperatingSystem'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+    }
+
+    It 'returns a real array, not a bare object, when exactly one instance is found (with a filter)' {
+        Mock Get-CimInstance { [pscustomobject]@{ DeviceID = 'C:' } }
+
+        $result = Get-CimDataSafe -ClassName 'Win32_LogicalDisk' -Filter 'DriveType = 3'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+    }
+
+    It 'returns an empty array instead of throwing when the query fails' {
+        Mock Get-CimInstance { throw 'access denied' }
+
+        $result = Get-CimDataSafe -ClassName 'Win32_Processor' -WarningAction SilentlyContinue
+
+        @($result).Count | Should -Be 0
+    }
 }
 
 Describe 'Install-InventoryImportExcelIfNeeded' {

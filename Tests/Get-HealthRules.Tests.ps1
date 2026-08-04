@@ -59,6 +59,11 @@ Describe 'Get-HealthFinding' {
   $recommendations.Count | Should -Be 1
   $recommendations[0].FindingIds | Should -Contain 'CPU-001'
  }
+ It 'returns a real array, not a bare object, when exactly one finding is produced' {
+  $result = Get-HealthFinding -Metrics ([pscustomobject]@{Storage=[pscustomobject]@{SystemFreePercent=9.99}})
+  $result.GetType().IsArray | Should -BeTrue
+  $result.Count | Should -Be 1
+ }
  It 'applies validated configurable memory and disk thresholds' {
   $thresholds = [pscustomobject]@{MemoryWarningPercent=60;MemoryHighPercent=75;MemoryCriticalPercent=90;MinimumAvailableMemoryMB=1500;CriticalFreeDiskPercent=5;MinimumFreeDiskPercent=15}
   $metrics = [pscustomobject]@{Memory=[pscustomobject]@{UsagePercent=76;WarningMatchingSamplePercent=100;HighMatchingSamplePercent=80;CriticalMatchingSamplePercent=0;AvailableMemoryMB=1400;LowAvailableMatchingSamplePercent=80};Storage=[pscustomobject]@{SystemFreePercent=7}}

@@ -1,6 +1,6 @@
 ﻿function Get-GraphicsInventory {
     $raw = Get-CimDataSafe -ClassName "Win32_VideoController"
-    return @(
+    return ,@(
         $raw | ForEach-Object {
             [ordered]@{
                 Name          = Get-SafeString $_.Name

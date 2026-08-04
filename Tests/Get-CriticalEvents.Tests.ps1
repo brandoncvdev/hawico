@@ -20,7 +20,21 @@ Describe 'Group-CriticalEvent' {
   $r[0].Message|Should -Not -Match 'alice@example.com|192\.168\.10\.5|550e8400'
   $r[0].Message.Length|Should -BeLessOrEqual 240
  }
- It 'returns an empty collection for no evidence' { @(Group-CriticalEvent -Events @()).Count|Should -Be 0 }
+ It 'returns an empty collection for no evidence' {
+  # No extra @() around this call: Group-CriticalEvent already returns a
+  # correctly-shaped array via its own `,@()` return guard (added while
+  # fixing the single-element array collapse bug). Wrapping an
+  # already-guarded call in another @() re-nests an empty result into a
+  # 1-element array containing the empty array, making .Count report 1
+  # instead of 0 — this line used to rely on the guard being absent.
+  (Group-CriticalEvent -Events @()).Count|Should -Be 0
+ }
+ It 'returns a real array, not a bare object, when grouping collapses to exactly one result' {
+  $events=@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='bad sector 123'})
+  $r=Group-CriticalEvent -Events $events
+  $r.GetType().IsArray|Should -BeTrue
+  $r.Count|Should -Be 1
+ }
 }
 Describe 'Get-CriticalEvent' {
  It 'recognizes the Windows no matching events condition' {
@@ -49,7 +63,12 @@ Describe 'Get-CriticalEvent' {
   $result.Errors.Count|Should -BeGreaterThan 0
  }
  It 'queries and groups Windows events' { Mock Get-WinEvent { if($FilterHashtable.ProviderName -eq 'Disk'){@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='error 1'})}else{@()} };(Get-CriticalEvent -LookbackDays 7)[0].OccurrenceCount|Should -Be 1 }
- It 'returns empty evidence when the provider fails' { Mock Get-WinEvent { throw 'denied' };@(Get-CriticalEvent -LookbackDays 7).Count|Should -Be 0 }
+ It 'returns empty evidence when the provider fails' {
+  # Same reasoning as the Group-CriticalEvent empty case above: no extra
+  # @() around an already comma-guarded call.
+  Mock Get-WinEvent { throw 'denied' }
+  (Get-CriticalEvent -LookbackDays 7).Count|Should -Be 0
+ }
  It 'keeps successful providers when another provider fails' {
   Mock Get-WinEvent {
    if ($FilterHashtable.ProviderName -in @('Disk','Microsoft-Windows-Disk')) { throw 'provider unavailable' }
@@ -85,5 +104,11 @@ Describe 'Get-CriticalEvent' {
   Get-CriticalEventResult -LookbackDays 7 | Out-Null
   Should -Invoke -CommandName Get-WinEvent -ParameterFilter { $FilterHashtable.ProviderName -eq 'Disk' -and $FilterHashtable.LogName -eq 'System' }
   Should -Invoke -CommandName Get-WinEvent -ParameterFilter { $FilterHashtable.ProviderName -eq 'Application Error' -and $FilterHashtable.LogName -eq 'Application' }
+ }
+ It 'returns a real array, not a bare object, when exactly one event matches' {
+  Mock Get-WinEvent { if($FilterHashtable.ProviderName -eq 'Disk'){@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='error 1'})}else{@()} }
+  $result=Get-CriticalEvent -LookbackDays 7
+  $result.GetType().IsArray|Should -BeTrue
+  $result.Count|Should -Be 1
  }
 }

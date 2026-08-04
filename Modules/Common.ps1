@@ -100,17 +100,17 @@ function Get-CimDataSafe {
 
     try {
         if ([string]::IsNullOrWhiteSpace($Filter)) {
-            return @(Get-CimInstance -Namespace $Namespace -ClassName $ClassName -ErrorAction Stop)
+            return ,@(Get-CimInstance -Namespace $Namespace -ClassName $ClassName -ErrorAction Stop)
         }
 
-        return @(
+        return ,@(
             Get-CimInstance -Namespace $Namespace -ClassName $ClassName `
                 -Filter $Filter -ErrorAction Stop
         )
     }
     catch {
         Write-Warning ("No se pudo consultar {0}: {1}" -f $ClassName, $_.Exception.Message)
-        return @()
+        return ,@()
     }
 }
 

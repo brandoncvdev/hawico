@@ -14,14 +14,14 @@ function Group-CriticalEvent {
  $prepared=@($Events|Where-Object{$null-ne $_}|ForEach-Object{
   [pscustomobject]@{Provider=[string]$_.ProviderName;Id=[int]$_.Id;Level=[string]$_.LevelDisplayName;Time=[datetime]$_.TimeCreated;Message=ConvertTo-HealthEventMessage -Message $_.Message}
  })
- return @($prepared|Group-Object Provider,Id,Message|ForEach-Object{
+ return ,@($prepared|Group-Object Provider,Id,Message|ForEach-Object{
   $ordered=@($_.Group|Sort-Object Time)
   [pscustomobject][ordered]@{Provider=$ordered[0].Provider;Id=$ordered[0].Id;Level=$ordered[0].Level;Message=$ordered[0].Message;OccurrenceCount=$ordered.Count;FirstSeen=$ordered[0].Time;LastSeen=$ordered[-1].Time}
  })
 }
 function Get-CriticalEvent {
  param([ValidateRange(1,30)][int]$LookbackDays=7)
- return @((Get-CriticalEventResult -LookbackDays $LookbackDays).Events)
+ return ,@((Get-CriticalEventResult -LookbackDays $LookbackDays).Events)
 }
 
 function Test-HealthNoMatchingEventError {
@@ -72,7 +72,7 @@ function Get-CriticalEventResult {
   DurationMilliseconds=$timer.ElapsedMilliseconds
   ErrorCode=if($status-eq'Failed'){'EVENT-QUERY-FAILED'}elseif($status-eq'Partial'){'EVENT-QUERY-PARTIAL'}else{$null}
   ErrorMessage=if($status-eq'Failed'){'No configured event provider could be queried: '+(@($errors.Provider)-join', ')+'.'}elseif($status-eq'Partial'){'Unavailable event providers: '+(@($errors.Provider)-join', ')+'.'}else{$null}
-  Events=@(Group-CriticalEvent -Events $raw)
+  Events=Group-CriticalEvent -Events $raw
   Errors=$errors
  }
 }
