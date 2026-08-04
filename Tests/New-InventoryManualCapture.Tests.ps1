@@ -223,6 +223,43 @@ Describe 'ConvertTo-InventoryOrganizationUnitMenu' {
     }
 }
 
+Describe 'Get-InventoryOrganizationUnitChildren' {
+    # ConvertTo-InventoryOrganizationUnitMenu's own external contract (a
+    # flat, correctly-shaped menu array) stayed correct even before this fix,
+    # because PowerShell 7 (used to run this suite) tolerates .Count/[0]
+    # indexing on a bare, collapsed scalar via features Windows PowerShell
+    # 5.1 does not have — the same blind spot that hid the original bug this
+    # session started from. Extracting the previously-inline
+    # `$roots = if (...) { $childrenByParent[key] } else { @() }` lookup
+    # into this small function makes the collapse directly observable via
+    # .GetType().IsArray, instead of relying on downstream tolerance.
+    It 'returns a real array, not a bare scalar, when the parent has exactly one child' {
+        $childrenByParent = @{ '' = @([PSCustomObject]@{ id = 'root1'; name = 'Root One' }) }
+
+        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey ''
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0].id | Should -Be 'root1'
+    }
+
+    It 'returns every child when the parent has more than one' {
+        $childrenByParent = @{ 'dir-admin' = @([PSCustomObject]@{ id = 'a' }, [PSCustomObject]@{ id = 'b' }) }
+
+        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey 'dir-admin'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 2
+    }
+
+    It 'returns a real empty array, not null, when the parent key is not present' {
+        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent @{} -ParentKey 'missing'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+}
+
 Describe 'Read-InventoryOrganizationUnitSelection' {
     It 'returns null immediately without prompting when there are no units' {
         $calls = [ordered]@{ Prompter = 0 }

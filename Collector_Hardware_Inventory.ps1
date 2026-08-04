@@ -126,32 +126,29 @@ try {
     # and passes them in as -ManualFieldKeys. Direct standalone invocation
     # (no launcher involved) still works: it falls back to config.json's
     # flat ManualFields list, exactly as before organization packages
-    # existed.
-    # `$var = if (...) {...} else {...}` routes each branch's trailing value
-    # through the pipeline output stream, same as a function's implicit
-    # return — so a branch producing an array of exactly one element
-    # collapses to a bare scalar unless guarded with a leading unary comma.
-    # A plain `$x = @(y)` assignment does NOT have this problem (no pipeline
-    # boundary involved); only assignment-from-a-statement-block does.
-    $resolvedManualFieldKeys = if ($null -ne $ManualFieldKeys) {
-        ,@($ManualFieldKeys)
+    # existed. The fallback/array-shape logic lives in
+    # Resolve-InventoryManualFieldKeys / Resolve-InventoryOrganizationUnits
+    # (Modules/Common.ps1) instead of inline here, so it can be covered by a
+    # real runtime test (array vs. bare scalar) instead of only the text
+    # contract test this script itself gets.
+    $configManualFields = $null
+    if ($config.PSObject.Properties.Name -contains "ManualFields") {
+        $configManualFields = $config.ManualFields
     }
-    else {
-        $fallbackManualFieldKeys = @()
-        if ($config.PSObject.Properties.Name -contains "ManualFields" -and $null -ne $config.ManualFields) {
-            $fallbackManualFieldKeys = @($config.ManualFields)
-        }
-        ,$fallbackManualFieldKeys
-    }
+    $resolvedManualFieldKeys = Resolve-InventoryManualFieldKeys -PassedKeys $ManualFieldKeys -ConfigManualFields $configManualFields
 
-    $resolvedOrganizationUnits = if ($null -ne $OrganizationUnits) { ,@($OrganizationUnits) } else { ,@() }
+    $resolvedOrganizationUnits = Resolve-InventoryOrganizationUnits -PassedUnits $OrganizationUnits
 
+    # else { @() } would collapse to $null when this branch is taken (no
+    # manual fields configured at all) — same if-expression-assignment
+    # hazard as the fix above, found via a full-repo sweep for this exact
+    # pattern after the collector broke for real on Windows PowerShell 5.1.
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
             -OrganizationUnits $resolvedOrganizationUnits
     }
     else {
-        @()
+        ,@()
     }
 
     $collectorVersion = Get-CollectorVersion -BasePath $basePath

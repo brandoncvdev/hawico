@@ -30,6 +30,21 @@
         $script | Should -Match '-OrganizationUnits'
     }
 
+    It 'resolves manual field keys and organization units through testable Modules/Common.ps1 functions instead of inline array-collapse-prone logic' {
+        $script | Should -Match 'Resolve-InventoryManualFieldKeys'
+        $script | Should -Match 'Resolve-InventoryOrganizationUnits'
+    }
+
+    It 'comma-guards the empty-manual-fields fallback branch against the if-expression array-collapse bug' {
+        # $manualFields = if (...) { Read-InventoryManualCapture ... } else { @() }
+        # The else branch must be ,@() — a bare @() here collapses to $null when
+        # this branch is taken, since `$var = if (...) {...} else {...}` routes
+        # each branch's trailing value through the same output-stream boundary
+        # a `return` does (confirmed empirically; broke the collector for real
+        # on Windows PowerShell 5.1 for a different branch in this same file).
+        $script | Should -Match 'else\s*\{\s*,@\(\)\s*\}'
+    }
+
     It 'passes the captured manual fields into the collection record' {
         $script | Should -Match '-ManualFields\s+\$manualFields'
     }

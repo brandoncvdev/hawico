@@ -14,4 +14,23 @@ Describe 'ConvertTo-HealthCheckReport' {
   $r=ConvertTo-HealthCheckReport -BaseInventory @{} -HealthCheck @{} -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 1
   $r.Collection.ScriptUser|Should -Be '<REDACTED>'
  }
+ It 'returns a real array, not a bare scalar, for Processors when exactly one processor is present' {
+  $base=[ordered]@{Computer=@{Hostname='PC1'};OperatingSystem=@{};BIOS=@{};Motherboard=@{};Processors=@([pscustomobject]@{Name='CPU0'});Memory=@{};Storage=@{}}
+  $r=ConvertTo-HealthCheckReport -BaseInventory $base -HealthCheck ([ordered]@{Status='Completed'}) -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 1
+  $r.Processors.GetType().IsArray|Should -BeTrue
+  $r.Processors.Count|Should -Be 1
+  $r.Processors[0].Name|Should -Be 'CPU0'
+ }
+ It 'returns a real empty array, not null, for Processors when the base inventory has none' {
+  $base=[ordered]@{Computer=@{};OperatingSystem=@{};BIOS=@{};Motherboard=@{};Processors=@();Memory=@{};Storage=@{}}
+  $r=ConvertTo-HealthCheckReport -BaseInventory $base -HealthCheck ([ordered]@{Status='Completed'}) -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 1
+  $r.Processors.GetType().IsArray|Should -BeTrue
+  $r.Processors.Count|Should -Be 0
+ }
+ It 'preserves a nested object field (Computer) as itself, not wrapped in an array, after the comma guard' {
+  $base=[ordered]@{Computer=@{Hostname='PC1'};OperatingSystem=@{};BIOS=@{};Motherboard=@{};Processors=@();Memory=@{};Storage=@{}}
+  $r=ConvertTo-HealthCheckReport -BaseInventory $base -HealthCheck ([ordered]@{Status='Completed'}) -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 1
+  $r.Computer.GetType().IsArray|Should -BeFalse
+  $r.Computer.Hostname|Should -Be 'PC1'
+ }
 }

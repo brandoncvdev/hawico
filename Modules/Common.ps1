@@ -54,6 +54,53 @@ function Get-CollectorVersion {
     return $version
 }
 
+function Resolve-InventoryManualFieldKeys {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Resolves an in-memory field-key list without changing system state.'
+    )]
+    param(
+        [AllowNull()][string[]]$PassedKeys,
+        [AllowNull()][object[]]$ConfigManualFields
+    )
+
+    # Every branch below is reached through `return`, so every array value
+    # must cross the output stream through a leading unary comma — the same
+    # guard `return @(...)` needed elsewhere, here applied explicitly per
+    # branch instead of via `$var = if (...) {...} else {...}` (that
+    # assignment-from-a-statement-block form has the identical hazard and is
+    # what broke the collector on real Windows PowerShell 5.1: each branch's
+    # trailing value crosses the same output stream a `return` does).
+    if ($null -ne $PassedKeys) {
+        return ,@($PassedKeys)
+    }
+
+    $fallbackManualFieldKeys = @()
+    if ($null -ne $ConfigManualFields) {
+        $fallbackManualFieldKeys = @($ConfigManualFields)
+    }
+
+    return ,$fallbackManualFieldKeys
+}
+
+function Resolve-InventoryOrganizationUnits {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Resolves an in-memory organization-unit list without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$PassedUnits
+    )
+
+    if ($null -ne $PassedUnits) {
+        return ,@($PassedUnits)
+    }
+
+    return ,@()
+}
+
 function Install-InventoryImportExcelIfNeeded {
     [CmdletBinding()]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(

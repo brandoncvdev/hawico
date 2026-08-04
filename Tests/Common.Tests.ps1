@@ -33,6 +33,64 @@ Describe 'Get-CimDataSafe' {
     }
 }
 
+Describe 'Resolve-InventoryManualFieldKeys' {
+    It 'returns a real array, not a bare scalar, when exactly one key is passed in directly' {
+        $result = Resolve-InventoryManualFieldKeys -PassedKeys @('assignment.user.fullName') -ConfigManualFields @('fallback.one', 'fallback.two')
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0] | Should -Be 'assignment.user.fullName'
+    }
+
+    It 'returns a real array, not a bare scalar, when falling back to exactly one config manual field' {
+        $result = Resolve-InventoryManualFieldKeys -PassedKeys $null -ConfigManualFields @('assignment.organizationUnitId')
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0] | Should -Be 'assignment.organizationUnitId'
+    }
+
+    It 'returns a real empty array when there is nothing to fall back to' {
+        $result = Resolve-InventoryManualFieldKeys -PassedKeys $null -ConfigManualFields $null
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'prefers the passed-in keys over the config fallback when both are present' {
+        $result = Resolve-InventoryManualFieldKeys -PassedKeys @('from.launcher') -ConfigManualFields @('from.config')
+
+        $result.Count | Should -Be 1
+        $result[0] | Should -Be 'from.launcher'
+    }
+
+    It 'returns every passed-in key when there is more than one' {
+        $result = Resolve-InventoryManualFieldKeys -PassedKeys @('field.one', 'field.two') -ConfigManualFields $null
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 2
+    }
+}
+
+Describe 'Resolve-InventoryOrganizationUnits' {
+    It 'returns a real array, not a bare scalar, when exactly one unit is passed in' {
+        $unit = [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; parentId = $null; sortOrder = 10 }
+
+        $result = Resolve-InventoryOrganizationUnits -PassedUnits @($unit)
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0].id | Should -Be 'site-center'
+    }
+
+    It 'returns a real empty array when nothing was passed' {
+        $result = Resolve-InventoryOrganizationUnits -PassedUnits $null
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+}
+
 Describe 'Install-InventoryImportExcelIfNeeded' {
     It 'returns true immediately when already available, without prompting or installing' {
         $calls = [ordered]@{ Confirm = 0; Installer = 0 }

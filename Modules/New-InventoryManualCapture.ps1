@@ -29,6 +29,33 @@
     }
 }
 
+function Get-InventoryOrganizationUnitChildren {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Looks up an in-memory child list without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][hashtable]$ChildrenByParent,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ParentKey
+    )
+
+    # Extracted out of what used to be an inline
+    # `$roots = if ($childrenByParent.ContainsKey($k)) { $childrenByParent[$k] } else { @() }`
+    # so the array-collapse fix is directly testable: that inline form
+    # routes the ContainsKey-branch's value (an array, possibly with one
+    # element) through the same output-stream boundary a `return` does, and
+    # PowerShell 7 (used to run this suite) silently tolerates the resulting
+    # collapsed scalar's .Count/[0] indexing in a way Windows PowerShell 5.1
+    # does not — the exact blind spot that broke the collector for real
+    # elsewhere in this codebase.
+    if ($ChildrenByParent.ContainsKey($ParentKey)) {
+        return ,@($ChildrenByParent[$ParentKey])
+    }
+
+    return ,@()
+}
+
 function ConvertTo-InventoryOrganizationUnitMenu {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
@@ -67,7 +94,7 @@ function ConvertTo-InventoryOrganizationUnitMenu {
     # ascending order, giving parent-then-children (pre-order) traversal.
     $stack = [System.Collections.Generic.Stack[object]]::new()
 
-    $roots = if ($childrenByParent.ContainsKey('')) { $childrenByParent[''] } else { @() }
+    $roots = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey ''
     for ($i = $roots.Count - 1; $i -ge 0; $i--) {
         $stack.Push([PSCustomObject]@{ Unit = $roots[$i]; Depth = 0 })
     }
@@ -92,7 +119,7 @@ function ConvertTo-InventoryOrganizationUnitMenu {
             Depth = $frame.Depth
         }
 
-        $children = if ($childrenByParent.ContainsKey($id)) { $childrenByParent[$id] } else { @() }
+        $children = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey $id
         for ($i = $children.Count - 1; $i -ge 0; $i--) {
             $stack.Push([PSCustomObject]@{ Unit = $children[$i]; Depth = $frame.Depth + 1 })
         }
