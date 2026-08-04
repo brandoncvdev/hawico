@@ -1,4 +1,4 @@
-function ConvertTo-HealthCheckReport {
+﻿function ConvertTo-HealthCheckReport {
  param([Parameter(Mandatory)][object]$BaseInventory,[Parameter(Mandatory)][object]$HealthCheck,[datetimeoffset]$CollectedAt,[long]$DurationMilliseconds,[string]$ScriptUser='<REDACTED>')
  $r=[ordered]@{SchemaVersion='2.0';Collection=[ordered]@{CollectedAt=$CollectedAt.ToString('o');Mode='Diagnostic';Type='WindowsHealthCheck';ScriptUser=$ScriptUser;DurationMilliseconds=$DurationMilliseconds}}
  foreach($name in @('Computer','OperatingSystem','BIOS','Motherboard','Processors','Memory','Storage')){

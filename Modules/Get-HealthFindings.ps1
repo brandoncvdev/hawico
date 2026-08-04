@@ -1,4 +1,4 @@
-function Get-HealthScoreStatus {
+﻿function Get-HealthScoreStatus {
     param([int]$Value)
     if ($Value -ge 90) { return "Healthy" }
     if ($Value -ge 75) { return "Attention" }

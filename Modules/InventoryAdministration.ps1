@@ -1,4 +1,4 @@
-function Get-InventoryAssetStorePath {
+﻿function Get-InventoryAssetStorePath {
     param([Parameter(Mandatory)][string]$BasePath)
 
     $administrationRoot = Join-Path $BasePath 'Administracion'

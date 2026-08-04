@@ -1,4 +1,4 @@
-Describe 'Start-Administration.ps1 menu wiring' {
+﻿Describe 'Start-Administration.ps1 menu wiring' {
     BeforeAll {
         $script = Get-Content "$PSScriptRoot/../Start-Administration.ps1" -Raw
     }

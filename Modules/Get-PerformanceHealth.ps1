@@ -1,4 +1,4 @@
-function Get-PerformanceThreshold {
+﻿function Get-PerformanceThreshold {
     param([AllowNull()][object]$Thresholds, [string]$Name, [double]$DefaultValue)
     if ($null -eq $Thresholds) { return $DefaultValue }
     if ($Thresholds -is [System.Collections.IDictionary] -and $Thresholds.Contains($Name)) { return [double]$Thresholds[$Name] }

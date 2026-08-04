@@ -1,4 +1,4 @@
-Describe 'Collector_Hardware_Inventory.ps1 collection record contract' {
+﻿Describe 'Collector_Hardware_Inventory.ps1 collection record contract' {
     BeforeAll {
         $script = Get-Content "$PSScriptRoot/../Collector_Hardware_Inventory.ps1" -Raw
     }

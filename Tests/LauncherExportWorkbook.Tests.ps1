@@ -1,4 +1,4 @@
-Describe 'Export-InventoryWorkbook.ps1 ImportExcel handling' {
+﻿Describe 'Export-InventoryWorkbook.ps1 ImportExcel handling' {
     BeforeAll {
         $script = Get-Content "$PSScriptRoot/../Export-InventoryWorkbook.ps1" -Raw
     }

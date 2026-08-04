@@ -1,4 +1,4 @@
-Describe 'Start-Inventory.ps1 collection session forwarding' {
+﻿Describe 'Start-Inventory.ps1 collection session forwarding' {
     BeforeAll {
         $script = Get-Content "$PSScriptRoot/../Start-Inventory.ps1" -Raw
     }

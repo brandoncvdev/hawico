@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Invoke-HealthCollectorSection.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Invoke-HealthCollectorSection.ps1" }
 
 Describe 'Invoke-HealthCollectorSection' {
  It 'returns measured collected data' {

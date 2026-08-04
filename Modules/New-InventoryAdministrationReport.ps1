@@ -1,4 +1,4 @@
-function New-InventoryAdministrationReport {
+﻿function New-InventoryAdministrationReport {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
         '',

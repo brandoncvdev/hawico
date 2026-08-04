@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Common.ps1"
     . "$PSScriptRoot/../Modules/New-InventoryConsolidatedWorkbook.ps1"
     . "$PSScriptRoot/../Modules/InventoryAdministration.ps1"

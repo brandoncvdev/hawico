@@ -1,4 +1,4 @@
-function Get-InventoryRecordPropertyValue {
+﻿function Get-InventoryRecordPropertyValue {
     param(
         [AllowNull()][object]$Object,
         [Parameter(Mandatory)][string]$PropertyName

@@ -1,4 +1,4 @@
-$isWindowsTarget = $PSVersionTable.PSVersion.Major -le 5 -or $PSVersionTable.Platform -eq 'Win32NT' -or $env:OS -eq 'Windows_NT'
+﻿$isWindowsTarget = $PSVersionTable.PSVersion.Major -le 5 -or $PSVersionTable.Platform -eq 'Win32NT' -or $env:OS -eq 'Windows_NT'
 
 Describe 'Windows health collector integration' -Tag 'Integration' -Skip:(-not $isWindowsTarget) {
     BeforeAll {

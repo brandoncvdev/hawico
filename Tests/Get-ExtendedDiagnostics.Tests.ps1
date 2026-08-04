@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Get-ExtendedDiagnostics.ps1"
 }
 

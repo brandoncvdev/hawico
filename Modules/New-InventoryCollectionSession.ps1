@@ -1,4 +1,4 @@
-function New-InventoryCollectionSession {
+﻿function New-InventoryCollectionSession {
     [CmdletBinding()]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',

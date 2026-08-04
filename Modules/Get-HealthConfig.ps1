@@ -1,4 +1,4 @@
-function Get-HealthConfigProperty {
+﻿function Get-HealthConfigProperty {
     param(
         [AllowNull()][object]$Object,
         [Parameter(Mandatory)][string]$Name,

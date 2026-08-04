@@ -1,4 +1,4 @@
-function Get-InventoryFirstNetworkAdapterWithData {
+﻿function Get-InventoryFirstNetworkAdapterWithData {
     param([AllowNull()][object[]]$NetworkAdapters)
 
     foreach ($adapter in @($NetworkAdapters)) {

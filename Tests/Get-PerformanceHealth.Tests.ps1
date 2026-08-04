@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
  . "$PSScriptRoot/../Modules/Get-PerformanceHealth.ps1"
  if(-not(Get-Command Get-Counter -ErrorAction SilentlyContinue)){function Get-Counter { param([string[]]$Counter) }}
  if(-not(Get-Command Get-CimInstance -ErrorAction SilentlyContinue)){function Get-CimInstance { param([string]$ClassName) }}

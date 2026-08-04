@@ -1,4 +1,4 @@
-Describe 'Collector_Windows_HealthCheck.ps1 contract' {
+﻿Describe 'Collector_Windows_HealthCheck.ps1 contract' {
  BeforeAll { $script=Get-Content "$PSScriptRoot/../Collector_Windows_HealthCheck.ps1" -Raw }
  It 'exists and accepts only Diagnostic mode' { $script|Should -Match 'ValidateSet\([''"]Diagnostic[''"]\)' }
  It 'loads every delivery-one module' { foreach($name in @('Get-HealthConfig','Get-HealthCapabilities','Get-PerformanceHealth','Get-StorageHealth','Get-CriticalEvents','Get-HealthFindings','Invoke-HealthCheck','New-HealthCheckReport')){$script|Should -Match ([regex]::Escape($name))} }

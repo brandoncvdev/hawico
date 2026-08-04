@@ -1,4 +1,4 @@
-Describe 'config.json HealthCheck contract' {
+﻿Describe 'config.json HealthCheck contract' {
  It 'contains the documented validated defaults' {
   $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
   $c.HealthCheck.SampleDurationSeconds|Should -Be 60

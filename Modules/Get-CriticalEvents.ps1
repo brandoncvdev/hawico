@@ -1,4 +1,4 @@
-function ConvertTo-HealthEventMessage {
+﻿function ConvertTo-HealthEventMessage {
  param([AllowNull()][string]$Message)
  if([string]::IsNullOrWhiteSpace($Message)){return $null}
  $value=$Message -replace '(?i)C:\\Users\\[^\\\s]+','C:\Users\<USER>'

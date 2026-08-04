@@ -1,4 +1,4 @@
-function Get-InventoryOrganizationPackagePath {
+﻿function Get-InventoryOrganizationPackagePath {
     param(
         [Parameter(Mandatory)][string]$BasePath,
         [Parameter(Mandatory)][string]$OrganizationId

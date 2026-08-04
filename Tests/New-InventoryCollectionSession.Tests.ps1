@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Common.ps1"
     . "$PSScriptRoot/../Modules/New-InventoryCollectionSession.ps1"
 }

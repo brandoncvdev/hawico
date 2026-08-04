@@ -1,4 +1,4 @@
-function Get-ExtendedDiagnosticProperty {
+﻿function Get-ExtendedDiagnosticProperty {
     param(
         [AllowNull()][object]$Object,
         [Parameter(Mandatory)][string]$Name,

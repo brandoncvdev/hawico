@@ -1,4 +1,4 @@
-function Get-HealthPowerShellValue {
+﻿function Get-HealthPowerShellValue {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Table,
         [Parameter(Mandatory)][string]$Name,

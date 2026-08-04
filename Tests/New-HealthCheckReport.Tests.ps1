@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1" }
 Describe 'ConvertTo-HealthCheckReport' {
  It 'preserves schema 2.0 and existing inventory shapes' {
   $base=[ordered]@{Computer=@{Hostname='PC1'};OperatingSystem=@{Caption='Windows'};BIOS=@{};Motherboard=@{};Processors=@();Memory=@{};Storage=@{}}

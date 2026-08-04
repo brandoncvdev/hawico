@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"; . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1"; . "$PSScriptRoot/../Modules/Invoke-HealthCheck.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"; . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1"; . "$PSScriptRoot/../Modules/Invoke-HealthCheck.ps1" }
 Describe 'Invoke-HealthCheck' {
  It 'sums empty or incomplete evidence without relying on Measure-Object Sum' {
   (Get-HealthNumericSum -Items @() -PropertyName 'OccurrenceCount')|Should -Be 0

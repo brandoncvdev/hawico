@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-CriticalEvents.ps1";if(-not(Get-Command Get-WinEvent -ErrorAction SilentlyContinue)){function Get-WinEvent { param($FilterHashtable,$ListProvider) }} }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-CriticalEvents.ps1";if(-not(Get-Command Get-WinEvent -ErrorAction SilentlyContinue)){function Get-WinEvent { param($FilterHashtable,$ListProvider) }} }
 Describe 'Group-CriticalEvent' {
  It 'groups repeated provider and id events' {
   $events=@([pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-01';Message='bad sector 123'},[pscustomobject]@{ProviderName='Disk';Id=7;LevelDisplayName='Error';TimeCreated=[datetime]'2026-01-02';Message='bad sector 456'})

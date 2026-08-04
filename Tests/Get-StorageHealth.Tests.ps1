@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-StorageHealth.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-StorageHealth.ps1" }
 Describe 'Get-StorageHealth' {
  It 'identifies the system volume and preserves explicit health' {
   $s=[pscustomobject]@{Detailed=@([pscustomobject]@{FriendlyName='Disk';HealthStatus='Healthy';MediaType='SSD';BusType='NVMe'});Logical=@([pscustomobject]@{Drive='C:';FreePercent=15})}

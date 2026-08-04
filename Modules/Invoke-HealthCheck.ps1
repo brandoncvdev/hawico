@@ -1,4 +1,4 @@
-function Get-HealthInputValue {
+﻿function Get-HealthInputValue {
     param([AllowNull()][object]$Object, [string]$Name, [AllowNull()][object]$DefaultValue = $null)
     if ($null -eq $Object) { return $DefaultValue }
     if ($Object -is [System.Collections.IDictionary] -and $Object.Contains($Name)) { return $Object[$Name] }

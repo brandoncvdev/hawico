@@ -1,4 +1,4 @@
-function Invoke-HealthCollectorSection {
+﻿function Invoke-HealthCollectorSection {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][scriptblock]$Operation,

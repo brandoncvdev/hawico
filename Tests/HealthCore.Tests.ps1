@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Get-HealthConfig.ps1"
     . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"
 }

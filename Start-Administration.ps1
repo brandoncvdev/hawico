@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 try {
     $basePath = Split-Path -Parent $MyInvocation.MyCommand.Path

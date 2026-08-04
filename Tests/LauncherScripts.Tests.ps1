@@ -1,4 +1,4 @@
-Describe 'Bootstrap.ps1 catch block keeps the window open on error' {
+﻿Describe 'Bootstrap.ps1 catch block keeps the window open on error' {
     BeforeAll {
         $script = Get-Content "$PSScriptRoot/../Bootstrap.ps1" -Raw
     }

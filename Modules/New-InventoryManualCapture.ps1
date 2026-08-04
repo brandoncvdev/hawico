@@ -1,4 +1,4 @@
-function New-InventoryManualFieldValue {
+﻿function New-InventoryManualFieldValue {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
         '',

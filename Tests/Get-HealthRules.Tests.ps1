@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1" }
 Describe 'Get-HealthFinding' {
  It 'honors every sustained memory utilization boundary' {
   $cases = @(
