@@ -248,6 +248,69 @@ In short: an organization ships **either** a nested `organization-units.json`
 both modes active for the same `assignment.departmentUnitId` field at once,
 since `-DepartmentUnits` always wins when present.
 
+## Reusable visit context (doc07 "Reutilización durante visita")
+
+> El técnico selecciona un contexto. Los valores se heredan hasta que se
+> cambien, evitando capturar el mismo departamento en cada equipo.
+
+Before this, every single collection re-asked Dirección, Departamento and
+free text for every manual field — including Técnico, which was never asked
+interactively at all (only read once from `config.json.CollectionSession.Technician`).
+A technician working through 10 machines in the same office had to answer
+the same catalog picks 10 times.
+
+`Start-Inventory.ps1` now resolves a **visit context** once, before the main
+menu loop, via a local `Read-InventoryVisitContext` function (dot-sources
+`Modules\New-InventoryManualCapture.ps1` for
+`Read-InventoryOrganizationUnitSelection` / `Get-InventoryOrganizationUnitChildren`):
+
+1. **Técnico**: `Read-Host "Técnico responsable de esta visita (Enter para
+   mantener '<current>')"`. Enter keeps whatever `$collectionSession.Technician`
+   (or the previous visit-context answer) already was; typing a name
+   overrides it **for this launcher session only** — never written back to
+   `config.json`.
+2. **Dirección**: if `$organizationUnits` has data, picked once via
+   `Read-InventoryOrganizationUnitSelection`.
+3. **Departamento**: resolved once, using the exact same priority
+   `Read-InventoryManualCapture` itself uses — the flat/independent
+   `$departmentUnits` catalog first (offered regardless of whether Dirección
+   was picked), the cascade (`Get-InventoryOrganizationUnitChildren` off the
+   picked Dirección) only when no independent catalog is configured.
+
+The result is stored as `$visitTechnician` (a plain string, forwarded as
+`$collectionArguments.Technician`) and `$visitPresetValues` (a hashtable —
+`assignment.organizationUnitId` / `assignment.departmentUnitId` → the
+selected unit's `Name`, **only for the keys that were actually resolved**;
+forwarded as `$collectionArguments.PresetManualFieldValues`).
+
+`Read-InventoryManualCapture` gained a matching generic `-PresetValues`
+parameter (`Modules/New-InventoryManualCapture.ps1`): for any `-FieldKeys`
+entry present in `-PresetValues`, that value is used directly — no menu, no
+`Read-Host`, checked **before** the catalog/cascade/free-text logic already
+described above. `Collector_Hardware_Inventory.ps1` forwards
+`-PresetManualFieldValues` straight through as `-PresetValues`.
+
+Every other manual field (`assignment.user.fullName`, `assignment.locationId`,
+`asset.assetTag`, `collection.observations`, …) is **never** added to
+`$visitPresetValues` — those are per-machine/per-user data, not visit
+context, and are still asked on every single collection.
+
+If the technician skips Dirección with Enter, `assignment.organizationUnitId`
+is left out of `$visitPresetValues` entirely, and both
+`assignment.organizationUnitId`/`assignment.departmentUnitId` fall through to
+being asked normally on every machine (the existing per-machine catalog/cascade
+behavior, unchanged). The same happens if Dirección has children but the
+technician skips Departamento specifically: `Read-InventoryVisitContext`
+un-presets Dirección too in that case, rather than presetting a Dirección
+whose real `Id` (needed by the per-machine cascade to look up children) would
+otherwise be lost — a preset only ever carries the selected unit's `Name`.
+
+The visit context can be changed at any point without restarting the
+launcher: menu option **"9. Cambiar contexto de esta visita
+(Dirección/Departamento/Técnico)"** re-runs `Read-InventoryVisitContext` and
+updates `$collectionArguments` in place, so the next collection (options 1/2)
+picks up the new values immediately.
+
 ## Configuration
 
 ```json

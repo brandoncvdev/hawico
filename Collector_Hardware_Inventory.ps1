@@ -6,7 +6,8 @@ param(
     [AllowNull()][string]$Technician = $null,
     [AllowNull()][string[]]$ManualFieldKeys = $null,
     [AllowNull()][object[]]$OrganizationUnits = $null,
-    [AllowNull()][object[]]$DepartmentUnits = $null
+    [AllowNull()][object[]]$DepartmentUnits = $null,
+    [AllowNull()][hashtable]$PresetManualFieldValues = $null
 )
 
 Set-StrictMode -Version Latest
@@ -152,7 +153,8 @@ try {
     # pattern after the collector broke for real on Windows PowerShell 5.1.
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
-            -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits
+            -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits `
+            -PresetValues $PresetManualFieldValues
     }
     else {
         ,@()

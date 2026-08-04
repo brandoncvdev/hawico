@@ -44,6 +44,11 @@
         $script | Should -Match '-DepartmentUnits\s+\$resolvedDepartmentUnits'
     }
 
+    It 'accepts preset manual field values decided once for the whole visit (doc07 "Reutilización durante visita")' {
+        $script | Should -Match '\[AllowNull\(\)\]\[hashtable\]\$PresetManualFieldValues'
+        $script | Should -Match '-PresetValues\s+\$PresetManualFieldValues'
+    }
+
     It 'comma-guards the empty-manual-fields fallback branch against the if-expression array-collapse bug' {
         # $manualFields = if (...) { Read-InventoryManualCapture ... } else { @() }
         # The else branch must be ,@() — a bare @() here collapses to $null when

@@ -20,6 +20,7 @@ try {
     . (Join-Path $basePath "Modules\Common.ps1")
     . (Join-Path $basePath "Modules\New-InventoryCollectionSession.ps1")
     . (Join-Path $basePath "Modules\InventoryOrganizationPackage.ps1")
+    . (Join-Path $basePath "Modules\New-InventoryManualCapture.ps1")
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
     $sessionParameters = @{
@@ -72,12 +73,85 @@ try {
         -BasePath $resolvedOrganizationPackagesBasePath `
         -OrganizationId $collectionSession.OrganizationId
 
+    # doc07-Catalog-System.md "Reutilización durante visita": El técnico
+    # selecciona un contexto (Técnico/Dirección/Departamento). Los valores se
+    # heredan hasta que se cambien, evitando capturar el mismo departamento
+    # en cada equipo de una misma visita. Resolved once here, and again on
+    # demand from the menu (option 9) — never per collection.
+    function Read-InventoryVisitContext {
+        param(
+            [AllowNull()][string]$CurrentTechnician,
+            [AllowNull()][object[]]$OrganizationUnits = @(),
+            [AllowNull()][object[]]$DepartmentUnits = @()
+        )
+
+        Write-Host ""
+        Write-Host "--- Contexto de esta visita ---" -ForegroundColor Cyan
+
+        $technicianAnswer = Get-SafeString (Read-Host "Técnico responsable de esta visita (Enter para mantener '$CurrentTechnician')")
+        $resolvedTechnician = if ($null -ne $technicianAnswer) { $technicianAnswer } else { $CurrentTechnician }
+
+        $presetValues = @{}
+        $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
+        $hasDepartmentUnits = @($DepartmentUnits).Count -gt 0
+
+        $directionSelection = $null
+        if ($hasOrganizationUnits) {
+            $directionSelection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits
+            if ($null -ne $directionSelection) {
+                $presetValues['assignment.organizationUnitId'] = $directionSelection.Name
+            }
+        }
+
+        if ($hasDepartmentUnits) {
+            # Flat/independent mode: Departamento is always offered on its
+            # own, regardless of whether Dirección was picked above — same
+            # priority Read-InventoryManualCapture itself gives
+            # -DepartmentUnits over the cascade.
+            $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits
+            if ($null -ne $departmentSelection) {
+                $presetValues['assignment.departmentUnitId'] = $departmentSelection.Name
+            }
+        }
+        elseif ($null -ne $directionSelection) {
+            $childUnits = Get-InventoryOrganizationUnitChildren -Units $OrganizationUnits -ParentId $directionSelection.Id
+            if (@($childUnits).Count -gt 0) {
+                $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $childUnits
+                if ($null -ne $departmentSelection) {
+                    $presetValues['assignment.departmentUnitId'] = $departmentSelection.Name
+                }
+                else {
+                    # Dirección has children but the technician skipped
+                    # Departamento (Enter): un-preset Dirección too.
+                    # Presetting only Dirección would strand the per-machine
+                    # cascade — Read-InventoryManualCapture needs the picked
+                    # Dirección's real Id to filter children, and a preset
+                    # bypass only ever stores its Name. Both fields fall
+                    # through to the normal per-machine flow instead, where
+                    # the cascade still works correctly.
+                    $presetValues.Remove('assignment.organizationUnitId')
+                }
+            }
+        }
+
+        return [ordered]@{
+            Technician = $resolvedTechnician
+            PresetValues = $presetValues
+        }
+    }
+
+    $visitContext = Read-InventoryVisitContext -CurrentTechnician $collectionSession.Technician `
+        -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits
+    $visitTechnician = $visitContext.Technician
+    $visitPresetValues = $visitContext.PresetValues
+
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
-        Technician = $collectionSession.Technician
+        Technician = $visitTechnician
         ManualFieldKeys = $manualFieldKeys
         OrganizationUnits = $organizationUnits
         DepartmentUnits = $departmentUnits
+        PresetManualFieldValues = $visitPresetValues
     }
 
     function Wait-MenuInput {
@@ -104,6 +178,7 @@ try {
         Write-Host "6. Abrir último diagnóstico de salud"
         Write-Host "7. Abrir carpeta de logs"
         Write-Host "8. Salir"
+        Write-Host "9. Cambiar contexto de esta visita (Dirección/Departamento/Técnico)"
         Write-Host ""
 
         $option = Read-Host "Seleccione una opción"
@@ -204,6 +279,17 @@ try {
             "8" {
                 Write-Host ""
                 Write-Host "Cerrando el recolector..."
+            }
+
+            "9" {
+                $visitContext = Read-InventoryVisitContext -CurrentTechnician $visitTechnician `
+                    -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits
+                $visitTechnician = $visitContext.Technician
+                $visitPresetValues = $visitContext.PresetValues
+                $collectionArguments.Technician = $visitTechnician
+                $collectionArguments.PresetManualFieldValues = $visitPresetValues
+
+                Wait-MenuInput
             }
 
             default {

@@ -234,12 +234,14 @@ function Read-InventoryManualCapture {
         [AllowNull()][string]$Technician,
         [scriptblock]$Prompter = { param($Key) Read-Host "  $Key" },
         [AllowNull()][object[]]$OrganizationUnits = @(),
-        [AllowNull()][object[]]$DepartmentUnits = @()
+        [AllowNull()][object[]]$DepartmentUnits = @(),
+        [AllowNull()][hashtable]$PresetValues = @{}
     )
 
     $manualFields = @()
     $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
     $hasDepartmentUnits = @($DepartmentUnits).Count -gt 0
+    $hasPresetValues = $null -ne $PresetValues
     # Set only while walking assignment.organizationUnitId, and read right
     # after by assignment.departmentUnitId (which must come later in
     # -FieldKeys for the cascade to work): the Id of whatever direction the
@@ -248,11 +250,19 @@ function Read-InventoryManualCapture {
     $selectedOrganizationUnitId = $null
 
     foreach ($key in $FieldKeys) {
+        # doc07-Catalog-System.md "Reutilización durante visita": a value
+        # already decided for the current visit (e.g. Dirección/Departamento
+        # picked once for a batch of machines by the launcher) is used as-is
+        # — no prompt, no menu — ahead of every other resolution strategy
+        # below. Generic by design: not specific to any one field key.
+        $rawValue = if ($hasPresetValues -and $PresetValues.ContainsKey($key)) {
+            $PresetValues[$key]
+        }
         # doc07-Catalog-System.md: when an organization unit catalog is
         # configured, the technician picks from it instead of typing free
         # text — but only for this one field, and only when a catalog was
         # actually supplied (backward-compatible free text otherwise).
-        $rawValue = if ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
+        elseif ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
             $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter
             $selectedOrganizationUnitId = if ($null -ne $selection) { $selection.Id } else { $null }
             if ($null -ne $selection) { $selection.Name } else { $null }

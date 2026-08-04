@@ -353,6 +353,62 @@ Describe 'Read-InventoryManualCapture' {
         # proves -DepartmentUnits took priority, not the cascade.
         ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'Solo en catálogo independiente'
     }
+
+    It 'uses a preset value directly without invoking the Prompter for that field (visit-context reuse)' {
+        # doc07-Catalog-System.md "Reutilización durante visita": a value
+        # already decided for this visit (e.g. Dirección/Departamento picked
+        # once for a batch of machines) skips the prompt entirely for that
+        # one field, ahead of the catalog/cascade/free-text logic below it.
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = { param($Key) $calls.Count++; 'no debería llamarse' }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -PresetValues @{ 'assignment.organizationUnitId' = 'Recursos Humanos' }
+
+        $calls.Count | Should -Be 0
+        @($result).Count | Should -Be 1
+        $result[0].Key | Should -Be 'assignment.organizationUnitId'
+        $result[0].Value | Should -Be 'Recursos Humanos'
+    }
+
+    It 'a preset key coexists with other keys that are still prompted normally in the same call' {
+        $calls = [System.Collections.Generic.List[string]]::new()
+        $answers = @{ 'assignment.user.fullName' = 'Juan Pérez'; 'asset.assetTag' = 'AT-001' }
+        $prompter = { param($Key) $calls.Add($Key); $answers[$Key] }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.user.fullName', 'assignment.departmentUnitId', 'asset.assetTag') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -PresetValues @{ 'assignment.departmentUnitId' = 'TI' }
+
+        # Only the two non-preset keys ever reach the prompter, in order.
+        @($calls) | Should -Be @('assignment.user.fullName', 'asset.assetTag')
+        @($result).Count | Should -Be 3
+        ($result | Where-Object { $_.Key -eq 'assignment.user.fullName' }).Value | Should -Be 'Juan Pérez'
+        ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'TI'
+        ($result | Where-Object { $_.Key -eq 'asset.assetTag' }).Value | Should -Be 'AT-001'
+    }
+
+    It 'preset values take priority over the organization unit catalog menu for the same key' {
+        $units = @(
+            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+        )
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = { param($Key) $calls.Count++; '1' }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId') `
+            -Prompter $prompter `
+            -OrganizationUnits $units `
+            -PresetValues @{ 'assignment.organizationUnitId' = 'Valor preseteado' }
+
+        $calls.Count | Should -Be 0
+        $result[0].Value | Should -Be 'Valor preseteado'
+    }
 }
 
 Describe 'ConvertTo-InventoryOrganizationUnitMenu' {
