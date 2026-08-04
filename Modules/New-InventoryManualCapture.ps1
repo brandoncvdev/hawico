@@ -29,7 +29,7 @@
     }
 }
 
-function Get-InventoryOrganizationUnitChildren {
+function Get-InventoryOrganizationUnitMenuChildren {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
         '',
@@ -48,7 +48,11 @@ function Get-InventoryOrganizationUnitChildren {
     # PowerShell 7 (used to run this suite) silently tolerates the resulting
     # collapsed scalar's .Count/[0] indexing in a way Windows PowerShell 5.1
     # does not — the exact blind spot that broke the collector for real
-    # elsewhere in this codebase.
+    # elsewhere in this codebase. Named "...MenuChildren" (not just
+    # "...Children") to stay distinct from Get-InventoryOrganizationUnitChildren
+    # below, which filters the raw catalog by parentId for the
+    # Dirección→Departamento cascade — same-sounding purpose, different
+    # signature and caller.
     if ($ChildrenByParent.ContainsKey($ParentKey)) {
         return ,@($ChildrenByParent[$ParentKey])
     }
@@ -94,7 +98,7 @@ function ConvertTo-InventoryOrganizationUnitMenu {
     # ascending order, giving parent-then-children (pre-order) traversal.
     $stack = [System.Collections.Generic.Stack[object]]::new()
 
-    $roots = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey ''
+    $roots = Get-InventoryOrganizationUnitMenuChildren -ChildrenByParent $childrenByParent -ParentKey ''
     for ($i = $roots.Count - 1; $i -ge 0; $i--) {
         $stack.Push([PSCustomObject]@{ Unit = $roots[$i]; Depth = 0 })
     }
@@ -119,7 +123,7 @@ function ConvertTo-InventoryOrganizationUnitMenu {
             Depth = $frame.Depth
         }
 
-        $children = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey $id
+        $children = Get-InventoryOrganizationUnitMenuChildren -ChildrenByParent $childrenByParent -ParentKey $id
         for ($i = $children.Count - 1; $i -ge 0; $i--) {
             $stack.Push([PSCustomObject]@{ Unit = $children[$i]; Depth = $frame.Depth + 1 })
         }
@@ -170,11 +174,53 @@ function Read-InventoryOrganizationUnitSelection {
         $isNumeric = [int]::TryParse($answer, [ref]$selectedIndex)
 
         if ($isNumeric -and $selectedIndex -ge 1 -and $selectedIndex -le $menu.Count) {
-            return $menu[$selectedIndex - 1].Name
+            $selected = $menu[$selectedIndex - 1]
+            return [PSCustomObject]@{ Id = $selected.Id; Name = $selected.Name }
         }
 
         Write-Host "Opción inválida." -ForegroundColor Yellow
     }
+}
+
+function Get-InventoryOrganizationUnitChildren {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Filters an in-memory catalog without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$Units,
+        [AllowNull()][string]$ParentId
+    )
+
+    $allUnits = @(@($Units) | Where-Object { $null -ne $_ })
+    $children = @(
+        $allUnits |
+            Where-Object { [string]$_.parentId -eq [string]$ParentId } |
+            Sort-Object { [double]$_.sortOrder }
+    )
+
+    # ConvertTo-InventoryOrganizationUnitMenu only treats a unit as a root
+    # when its own parentId is null: it has no notion that $ParentId was
+    # excluded from this subset, so without this, every child here would
+    # still point at its real (now-absent) parent and the DFS would find
+    # zero roots — an empty, silently-skipped menu instead of a flat
+    # department list. Nulling parentId on a clone (the caller's original
+    # catalog objects are never mutated) turns "the children of X" into
+    # "the roots of this standalone sub-menu", which is exactly what
+    # feeding this straight into Read-InventoryOrganizationUnitSelection
+    # needs; every other property is preserved as-is.
+    return ,@(
+        $children | ForEach-Object {
+            [PSCustomObject]@{
+                id = $_.id
+                name = $_.name
+                type = $_.type
+                parentId = $null
+                sortOrder = $_.sortOrder
+            }
+        }
+    )
 }
 
 function Read-InventoryManualCapture {
@@ -192,6 +238,12 @@ function Read-InventoryManualCapture {
 
     $manualFields = @()
     $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
+    # Set only while walking assignment.organizationUnitId, and read right
+    # after by assignment.departmentUnitId (which must come later in
+    # -FieldKeys for the cascade to work): the Id of whatever direction the
+    # technician just picked, so the next field's menu can be filtered down
+    # to that direction's own children instead of the whole catalog again.
+    $selectedOrganizationUnitId = $null
 
     foreach ($key in $FieldKeys) {
         # doc07-Catalog-System.md: when an organization unit catalog is
@@ -199,7 +251,31 @@ function Read-InventoryManualCapture {
         # text — but only for this one field, and only when a catalog was
         # actually supplied (backward-compatible free text otherwise).
         $rawValue = if ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
-            Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter
+            $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter
+            $selectedOrganizationUnitId = if ($null -ne $selection) { $selection.Id } else { $null }
+            if ($null -ne $selection) { $selection.Name } else { $null }
+        }
+        elseif ($key -eq 'assignment.departmentUnitId') {
+            # Cascade, not a second free catalog pick: this field only ever
+            # offers the direct children of whatever direction was just
+            # selected above. No direction selected (skipped, no catalog) or
+            # a direction with no children both mean there is nothing
+            # meaningful to ask, so the technician is never prompted at all
+            # — this never falls back to free text.
+            $childUnits = if ($null -ne $selectedOrganizationUnitId) {
+                Get-InventoryOrganizationUnitChildren -Units $OrganizationUnits -ParentId $selectedOrganizationUnitId
+            }
+            else {
+                ,@()
+            }
+
+            if (@($childUnits).Count -gt 0) {
+                $selection = Read-InventoryOrganizationUnitSelection -Units $childUnits -Prompter $Prompter
+                if ($null -ne $selection) { $selection.Name } else { $null }
+            }
+            else {
+                $null
+            }
         }
         else {
             & $Prompter $key

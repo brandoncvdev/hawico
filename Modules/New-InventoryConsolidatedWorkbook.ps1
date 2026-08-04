@@ -116,10 +116,7 @@ function ConvertTo-InventoryWorkbookRow {
         'MAC ADDRESS' = if ($null -ne $adapter) { $adapter.MACAddress } else { $null }
         'DIRECCION' = Get-InventoryManualFieldValueByKey -ManualFields $Record.ManualFields -Key 'assignment.organizationUnitId'
         'USUARIO' = Get-InventoryManualFieldValueByKey -ManualFields $Record.ManualFields -Key 'assignment.user.fullName'
-        # No existe todavía un campo manual separado para el departamento
-        # (hijo de DIRECCION); el catálogo jerárquico de OrganizationUnit es
-        # Fase 4 del plan. No se inventa este dato.
-        'DEPARTAMENTO' = $null
+        'DEPARTAMENTO' = Get-InventoryManualFieldValueByKey -ManualFields $Record.ManualFields -Key 'assignment.departmentUnitId'
         'MARCA' = Get-SafeString $computer.Manufacturer
         'MODELO' = Get-SafeString $computer.Model
         # No hay detector de chasis (SMBIOS ChassisTypes) implementado todavía.

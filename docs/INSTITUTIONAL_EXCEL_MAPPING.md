@@ -21,9 +21,9 @@ El Excel es una proyección de presentación. No es la fuente de verdad.
 | A | REVISADO | ManualReview | Estado de revisión del registro importado. | Pendiente de administración |
 | B | IP | Network | Proyección de `TechnicalData.NetworkAdapters[].IPv4Addresses`; el JSON conserva todas las direcciones. | Disponible |
 | C | MAC ADDRESS | Network | Proyección de `TechnicalData.NetworkAdapters[].MACAddress`; nunca se usa sola para identificar el activo. | Disponible |
-| D | DIRECCION | VisitCapture/Catalog | Unidad organizacional superior seleccionada durante la visita. | Pendiente de captura manual |
+| D | DIRECCION | VisitCapture/Catalog | Unidad organizacional superior seleccionada durante la visita (`assignment.organizationUnitId`). | Disponible |
 | E | USUARIO | VisitCapture | Persona asignada al equipo. No debe copiarse desde `Collection.ScriptUser`, porque ese valor identifica a quien ejecutó el recolector. | Pendiente de captura manual |
-| F | DEPARTAMENTO | VisitCapture/Catalog | Unidad o departamento hijo de DIRECCION. | Pendiente de captura manual |
+| F | DEPARTAMENTO | VisitCapture/Catalog | Unidad o departamento hijo de DIRECCION (`assignment.departmentUnitId`), seleccionado en cascada: el menú solo ofrece los hijos directos de la DIRECCION ya elegida. Se omite sin preguntar si la DIRECCION no tiene hijos o no fue seleccionada. | Disponible |
 | G | MARCA | Hardware | `TechnicalData.Computer.Manufacturer`. | Disponible |
 | H | MODELO | Hardware | `TechnicalData.Computer.Model`. | Disponible |
 | I | PC / LAPTOP | Hardware/Calculated | Clasificación por chasis. `Computer.SystemType` no es suficiente para distinguir portátil y escritorio. | Requiere detector de chasis |

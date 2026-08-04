@@ -1,6 +1,7 @@
 ﻿BeforeAll {
     . "$PSScriptRoot/../Modules/Common.ps1"
     . "$PSScriptRoot/../Modules/New-InventoryManualCapture.ps1"
+    . "$PSScriptRoot/../Modules/InventoryOrganizationPackage.ps1"
 }
 
 Describe 'New-InventoryManualFieldValue' {
@@ -163,6 +164,93 @@ Describe 'Read-InventoryManualCapture' {
 
         $result[0].Value | Should -Be 'texto libre tipeado a mano'
     }
+
+    It 'cascades the selected assignment.organizationUnitId into assignment.departmentUnitId, offering only its direct children' {
+        $units = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        $answers = @('2', '1')
+        $state = [ordered]@{ Index = 0 }
+        $prompter = {
+            param($Key)
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                $value = $answers[$state.Index]
+                $state.Index++
+                return $value
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -OrganizationUnits $units
+
+        @($result).Count | Should -Be 2
+        ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'Dirección Administrativa'
+        ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'Recursos Humanos'
+    }
+
+    It 'skips assignment.departmentUnitId without prompting when the selected unit has no children' {
+        $units = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = {
+            param($Key)
+            $calls.Count++
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                return '3'
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -OrganizationUnits $units
+
+        @($result).Count | Should -Be 1
+        $result[0].Key | Should -Be 'assignment.organizationUnitId'
+        $result[0].Value | Should -Be 'Recursos Humanos'
+        $calls.Count | Should -Be 1
+    }
+
+    It 'skips assignment.departmentUnitId without prompting when no direction was selected (Enter to skip)' {
+        $units = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = {
+            param($Key)
+            $calls.Count++
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                return ''
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -OrganizationUnits $units
+
+        @($result).Count | Should -Be 0
+        $calls.Count | Should -Be 1
+    }
+
+    It 'skips assignment.departmentUnitId without prompting when no organization unit catalog is supplied at all' {
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = {
+            param($Key)
+            $calls.Count++
+            return 'ignorado'
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.departmentUnitId') `
+            -Prompter $prompter
+
+        @($result).Count | Should -Be 0
+        $calls.Count | Should -Be 0
+    }
 }
 
 Describe 'ConvertTo-InventoryOrganizationUnitMenu' {
@@ -223,7 +311,7 @@ Describe 'ConvertTo-InventoryOrganizationUnitMenu' {
     }
 }
 
-Describe 'Get-InventoryOrganizationUnitChildren' {
+Describe 'Get-InventoryOrganizationUnitMenuChildren' {
     # ConvertTo-InventoryOrganizationUnitMenu's own external contract (a
     # flat, correctly-shaped menu array) stayed correct even before this fix,
     # because PowerShell 7 (used to run this suite) tolerates .Count/[0]
@@ -232,11 +320,14 @@ Describe 'Get-InventoryOrganizationUnitChildren' {
     # session started from. Extracting the previously-inline
     # `$roots = if (...) { $childrenByParent[key] } else { @() }` lookup
     # into this small function makes the collapse directly observable via
-    # .GetType().IsArray, instead of relying on downstream tolerance.
+    # .GetType().IsArray, instead of relying on downstream tolerance. Named
+    # "...MenuChildren" (not just "...Children") to stay distinct from
+    # Get-InventoryOrganizationUnitChildren below, which filters the raw
+    # catalog by parentId for the Dirección→Departamento cascade.
     It 'returns a real array, not a bare scalar, when the parent has exactly one child' {
         $childrenByParent = @{ '' = @([PSCustomObject]@{ id = 'root1'; name = 'Root One' }) }
 
-        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey ''
+        $result = Get-InventoryOrganizationUnitMenuChildren -ChildrenByParent $childrenByParent -ParentKey ''
 
         $result.GetType().IsArray | Should -BeTrue
         $result.Count | Should -Be 1
@@ -246,14 +337,14 @@ Describe 'Get-InventoryOrganizationUnitChildren' {
     It 'returns every child when the parent has more than one' {
         $childrenByParent = @{ 'dir-admin' = @([PSCustomObject]@{ id = 'a' }, [PSCustomObject]@{ id = 'b' }) }
 
-        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent $childrenByParent -ParentKey 'dir-admin'
+        $result = Get-InventoryOrganizationUnitMenuChildren -ChildrenByParent $childrenByParent -ParentKey 'dir-admin'
 
         $result.GetType().IsArray | Should -BeTrue
         $result.Count | Should -Be 2
     }
 
     It 'returns a real empty array, not null, when the parent key is not present' {
-        $result = Get-InventoryOrganizationUnitChildren -ChildrenByParent @{} -ParentKey 'missing'
+        $result = Get-InventoryOrganizationUnitMenuChildren -ChildrenByParent @{} -ParentKey 'missing'
 
         $result.GetType().IsArray | Should -BeTrue
         $result.Count | Should -Be 0
@@ -271,7 +362,7 @@ Describe 'Read-InventoryOrganizationUnitSelection' {
         $calls.Prompter | Should -Be 0
     }
 
-    It 'returns the Name of the selected unit for a valid numeric choice' {
+    It 'returns the Id and Name of the selected unit for a valid numeric choice' {
         $units = @(
             [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
             [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'site-center'; sortOrder = 20 }
@@ -280,7 +371,8 @@ Describe 'Read-InventoryOrganizationUnitSelection' {
 
         $result = Read-InventoryOrganizationUnitSelection -Units $units -Prompter $prompter
 
-        $result | Should -Be 'Recursos Humanos'
+        $result.Id | Should -Be 'dept-hr'
+        $result.Name | Should -Be 'Recursos Humanos'
     }
 
     It 'returns null when the technician presses Enter (skip)' {
@@ -310,7 +402,44 @@ Describe 'Read-InventoryOrganizationUnitSelection' {
 
         $result = Read-InventoryOrganizationUnitSelection -Units $units -Prompter $prompter
 
-        $result | Should -Be 'Recursos Humanos'
+        $result.Id | Should -Be 'dept-hr'
+        $result.Name | Should -Be 'Recursos Humanos'
         $state.Index | Should -Be 3
+    }
+}
+
+Describe 'Get-InventoryOrganizationUnitChildren' {
+    It 'returns only the direct children of the given parent, ordered by sortOrder' {
+        $units = @(
+            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = 'site-center'; sortOrder = 20 }
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 20 }
+            [PSCustomObject]@{ id = 'dept-it'; name = 'Sistemas'; type = 'department'; parentId = 'dir-admin'; sortOrder = 10 }
+        )
+
+        $children = Get-InventoryOrganizationUnitChildren -Units $units -ParentId 'dir-admin'
+
+        @($children).Count | Should -Be 2
+        $children[0].id | Should -Be 'dept-it'
+        $children[1].id | Should -Be 'dept-hr'
+    }
+
+    It 'returns an empty array when the parent has no children' {
+        $units = @(
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 20 }
+        )
+
+        $children = Get-InventoryOrganizationUnitChildren -Units $units -ParentId 'dept-hr'
+
+        $children.GetType().IsArray | Should -BeTrue
+        @($children).Count | Should -Be 0
+    }
+
+    It 'returns an empty array without throwing when Units is null or empty' {
+        $fromNull = Get-InventoryOrganizationUnitChildren -Units $null -ParentId 'dir-admin'
+        $fromEmpty = Get-InventoryOrganizationUnitChildren -Units @() -ParentId 'dir-admin'
+
+        @($fromNull).Count | Should -Be 0
+        @($fromEmpty).Count | Should -Be 0
     }
 }

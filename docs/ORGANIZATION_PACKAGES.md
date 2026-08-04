@@ -16,9 +16,11 @@ fallback.
   `Read-InventoryManualCapture` to decide which fields to ask at all.
 - The **organization-unit catalog** is wired into capture: when one is
   configured, `assignment.organizationUnitId` is answered by picking from a
-  numbered menu instead of typing free text (see "Organization unit
-  selection" below). Every other manual field, and `assignment.organizationUnitId`
-  itself when no catalog is configured, still prompts free text.
+  numbered menu instead of typing free text, and `assignment.departmentUnitId`
+  cascades from that pick — offering only the selected unit's direct children
+  (see "Organization unit selection" below). Every other manual field, and
+  `assignment.organizationUnitId` itself when no catalog is configured, still
+  prompts free text.
 - **Custom-field definitions** (`custom-fields.json`) are loaded but not yet
   consumed anywhere — there is no per-field validation, type, or label
   rendering driven by them yet. That remains Fase 5 (interfaz
@@ -43,7 +45,7 @@ Config/Organizations/<organizationId>/
 
 A real, usable example package ships at
 `Config/Organizations/org-example/`, with a `basic-inventory` profile
-carrying the exact same 5 `manualFields` `config.json` already asks for
+carrying the exact same 6 `manualFields` `config.json` already asks for
 today — the system is immediately usable through the package, not just
 scaffolding.
 
@@ -151,17 +153,52 @@ Inside `Modules/New-InventoryManualCapture.ps1`:
   same `-Prompter` scriptblock `Read-InventoryManualCapture` already uses,
   and re-prompts on anything that isn't a valid option number until the
   technician picks one or presses Enter to skip. With no units at all it
-  returns `$null` immediately without printing anything.
-- `Read-InventoryManualCapture` calls this **only** for the
-  `assignment.organizationUnitId` key, and only when `-OrganizationUnits`
-  was actually supplied and non-empty; every other key is untouched.
+  returns `$null` immediately without printing anything. On a valid pick it
+  returns `{Id; Name}` (not a bare string) — the `Id` is what the next
+  cascade step needs to filter children; the `Name` is what gets stored.
+- `Get-InventoryOrganizationUnitChildren -Units -ParentId` (pure) filters the
+  full catalog down to the direct children of `ParentId`, ordered by
+  `sortOrder`. Each returned clone has its `parentId` reset to `$null`:
+  `ConvertTo-InventoryOrganizationUnitMenu` only recognizes a `$null`
+  `parentId` as a root, and it has no notion that `ParentId` itself was
+  excluded from this filtered subset — without the reset, every child would
+  still point at its real (now-absent) parent, the DFS would find zero
+  roots, and the department menu would come back empty and silently skip
+  instead of listing anything. The original catalog objects are never
+  mutated.
+- `Read-InventoryManualCapture` calls `Read-InventoryOrganizationUnitSelection`
+  for the `assignment.organizationUnitId` key (only when `-OrganizationUnits`
+  was actually supplied and non-empty), and it remembers the selected unit's
+  `Id` for the rest of the walk.
 
-The stored `FieldValue.Value` is the selected unit's **`name`** (e.g.
-`"Recursos Humanos"`), not its catalog `id` (e.g. `"dept-hr"`) — `FieldValue`
-(`docs/06-Data-Model.md`) only has one text `value`, and the Excel
-`DIRECCION` column (`docs/INSTITUTIONAL_EXCEL_MAPPING.md`) needs the
-readable name. This is exactly what a technician would have typed by hand
-before, just without typos now.
+### Cascading `assignment.departmentUnitId`
+
+`assignment.departmentUnitId` must come **after** `assignment.organizationUnitId`
+in `-FieldKeys` (and therefore in `config.json.ManualFields` / a profile's
+`manualFields`) — it never runs its own independent catalog pick:
+
+1. If no direction was selected just before it (skipped with Enter, or no
+   catalog was supplied at all), `assignment.departmentUnitId` is skipped
+   too — no prompt, no free-text fallback.
+2. Otherwise, `Get-InventoryOrganizationUnitChildren` filters the full
+   catalog to the selected direction's direct children.
+3. If there are none, `assignment.departmentUnitId` is skipped the same
+   way — a direction with no children has nothing meaningful to ask.
+4. If there are children, `Read-InventoryOrganizationUnitSelection` shows a
+   menu built **only** from that filtered list (never the whole catalog
+   again), and the technician's pick becomes the field's value.
+
+In every skip case the technician is never prompted at all for this field —
+it never degrades to typing a department by hand, since a hand-typed
+department wouldn't be tied to any direction.
+
+The stored `FieldValue.Value` for both fields is the selected unit's
+**`name`** (e.g. `"Recursos Humanos"`), not its catalog `id` (e.g.
+`"dept-hr"`) — `FieldValue` (`docs/06-Data-Model.md`) only has one text
+`value`, and the Excel `DIRECCION` / `DEPARTAMENTO` columns
+(`docs/INSTITUTIONAL_EXCEL_MAPPING.md`) need the readable name. This is
+exactly what a technician would have typed by hand before, just without
+typos now.
 
 ## Configuration
 

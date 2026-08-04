@@ -148,10 +148,36 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         )
     }
 
-    It 'leaves DEPARTAMENTO, PC / LAPTOP and every Assessment column null (not implemented yet)' {
+    It 'leaves DEPARTAMENTO null when no assignment.departmentUnitId manual field was captured' {
         $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord)
 
         $row.'DEPARTAMENTO' | Should -BeNullOrEmpty
+    }
+
+    It 'reads DEPARTAMENTO from the assignment.departmentUnitId manual field when it was captured' {
+        $manualFields = @(
+            [PSCustomObject]@{
+                Key = 'assignment.organizationUnitId'
+                Value = 'Dirección Administrativa'
+                Source = 'SessionContext'
+                CapturedBy = 'Técnico 01'
+            }
+            [PSCustomObject]@{
+                Key = 'assignment.departmentUnitId'
+                Value = 'Recursos Humanos'
+                Source = 'SessionContext'
+                CapturedBy = 'Técnico 01'
+            }
+        )
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord -ManualFields $manualFields)
+
+        $row.'DIRECCION' | Should -Be 'Dirección Administrativa'
+        $row.'DEPARTAMENTO' | Should -Be 'Recursos Humanos'
+    }
+
+    It 'leaves PC / LAPTOP and every Assessment column null (not implemented yet)' {
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord)
+
         $row.'PC / LAPTOP' | Should -BeNullOrEmpty
         $row.'CANTIDAD REQUERIDA (MEMORIA)' | Should -BeNullOrEmpty
         $row.'MEMORIA REQUERIDA' | Should -BeNullOrEmpty
