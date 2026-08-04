@@ -127,18 +127,24 @@ try {
     # (no launcher involved) still works: it falls back to config.json's
     # flat ManualFields list, exactly as before organization packages
     # existed.
+    # `$var = if (...) {...} else {...}` routes each branch's trailing value
+    # through the pipeline output stream, same as a function's implicit
+    # return — so a branch producing an array of exactly one element
+    # collapses to a bare scalar unless guarded with a leading unary comma.
+    # A plain `$x = @(y)` assignment does NOT have this problem (no pipeline
+    # boundary involved); only assignment-from-a-statement-block does.
     $resolvedManualFieldKeys = if ($null -ne $ManualFieldKeys) {
-        @($ManualFieldKeys)
+        ,@($ManualFieldKeys)
     }
     else {
         $fallbackManualFieldKeys = @()
         if ($config.PSObject.Properties.Name -contains "ManualFields" -and $null -ne $config.ManualFields) {
             $fallbackManualFieldKeys = @($config.ManualFields)
         }
-        $fallbackManualFieldKeys
+        ,$fallbackManualFieldKeys
     }
 
-    $resolvedOrganizationUnits = if ($null -ne $OrganizationUnits) { @($OrganizationUnits) } else { @() }
+    $resolvedOrganizationUnits = if ($null -ne $OrganizationUnits) { ,@($OrganizationUnits) } else { ,@() }
 
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
