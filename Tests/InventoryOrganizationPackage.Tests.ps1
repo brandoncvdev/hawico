@@ -9,7 +9,8 @@
             [string]$ProfileId = 'basic-inventory',
             [string[]]$ManualFields = @('assignment.user.fullName', 'asset.assetTag'),
             [switch]$IncludeCatalog,
-            [switch]$IncludeCustomFields
+            [switch]$IncludeCustomFields,
+            [switch]$IncludeDepartmentCatalog
         )
 
         $orgDir = Join-Path $BasePath $OrganizationId
@@ -49,6 +50,18 @@
             }
             $catalog | ConvertTo-Json -Depth 6 |
                 Set-Content -LiteralPath (Join-Path $catalogsDir 'organization-units.json') -Encoding UTF8
+        }
+
+        if ($IncludeDepartmentCatalog) {
+            $catalogsDir = Join-Path $orgDir 'catalogs'
+            New-Item -ItemType Directory -Force -Path $catalogsDir | Out-Null
+            $departmentCatalog = [ordered]@{
+                units = @(
+                    [ordered]@{ id = 'dept-finance'; name = 'Finanzas'; type = 'department'; parentId = $null; sortOrder = 10 }
+                )
+            }
+            $departmentCatalog | ConvertTo-Json -Depth 6 |
+                Set-Content -LiteralPath (Join-Path $catalogsDir 'departments.json') -Encoding UTF8
         }
 
         if ($IncludeCustomFields) {
@@ -226,6 +239,65 @@ Describe 'Get-InventoryOrganizationUnitCatalog' {
         @($result).Count | Should -Be 2
         $result[0].id | Should -Be 'site-center'
         $result[1].parentId | Should -Be 'site-center'
+    }
+}
+
+Describe 'Get-InventoryDepartmentUnitCatalog' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns an empty array when there is no organization package' {
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'does-not-exist'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns an empty array when the organization exists but has no departments.json' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' | Out-Null
+
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns an array even when departments.json has exactly one unit (single-element array bug)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -IncludeDepartmentCatalog | Out-Null
+
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0].id | Should -Be 'dept-finance'
+    }
+
+    It 'does not confuse departments.json with organization-units.json (independent, flat catalogs)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' `
+            -IncludeCatalog -IncludeDepartmentCatalog | Out-Null
+
+        $directions = Get-InventoryOrganizationUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+        $departments = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        @($directions).Count | Should -Be 2
+        @($departments).Count | Should -Be 1
+        $departments[0].id | Should -Be 'dept-finance'
+    }
+}
+
+Describe 'The real Config/Organizations/institucion-principal package shipped in this repo' {
+    It 'exposes independent, flat Dirección and Departamento catalogs (no parent-child relationship)' {
+        $repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+
+        $directions = Get-InventoryOrganizationUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
+        $departments = Get-InventoryDepartmentUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
+
+        @($directions).Count | Should -BeGreaterThan 0
+        @($departments).Count | Should -BeGreaterThan 0
+        @($directions | Where-Object { $null -ne $_.parentId }).Count | Should -Be 0
+        @($departments | Where-Object { $null -ne $_.parentId }).Count | Should -Be 0
     }
 }
 

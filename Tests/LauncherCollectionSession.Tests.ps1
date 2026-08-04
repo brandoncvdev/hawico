@@ -43,4 +43,12 @@
         $script | Should -Match 'Get-InventoryOrganizationUnitCatalog'
         $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*OrganizationUnits\s*=\s*\$organizationUnits[^}]*\}'
     }
+
+    It 'loads the independent department unit catalog and forwards it to the collector' {
+        # doc07-Catalog-System.md flat/independent mode: institutions whose
+        # Dirección and Departamento have no reliable parent-child
+        # relationship ship a second, independent catalogs/departments.json.
+        $script | Should -Match 'Get-InventoryDepartmentUnitCatalog'
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*DepartmentUnits\s*=\s*\$departmentUnits[^}]*\}'
+    }
 }

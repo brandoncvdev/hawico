@@ -5,7 +5,8 @@ param(
     [string]$SessionId = "SES-UNASSIGNED",
     [AllowNull()][string]$Technician = $null,
     [AllowNull()][string[]]$ManualFieldKeys = $null,
-    [AllowNull()][object[]]$OrganizationUnits = $null
+    [AllowNull()][object[]]$OrganizationUnits = $null,
+    [AllowNull()][object[]]$DepartmentUnits = $null
 )
 
 Set-StrictMode -Version Latest
@@ -139,13 +140,19 @@ try {
 
     $resolvedOrganizationUnits = Resolve-InventoryOrganizationUnits -PassedUnits $OrganizationUnits
 
+    # Resolve-InventoryOrganizationUnits is a generic array-shape resolver
+    # (fallback-to-empty-array plus the same comma-guard), not specific to
+    # any one catalog — reused here for the independent, flat department
+    # catalog (doc07-Catalog-System.md) instead of a near-duplicate function.
+    $resolvedDepartmentUnits = Resolve-InventoryOrganizationUnits -PassedUnits $DepartmentUnits
+
     # else { @() } would collapse to $null when this branch is taken (no
     # manual fields configured at all) — same if-expression-assignment
     # hazard as the fix above, found via a full-repo sweep for this exact
     # pattern after the collector broke for real on Windows PowerShell 5.1.
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
-            -OrganizationUnits $resolvedOrganizationUnits
+            -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits
     }
     else {
         ,@()
@@ -168,7 +175,7 @@ try {
     }
 
     if ([bool]$config.GenerateHTML) {
-        New-InventoryHtml -Inventory $inventory -Path $htmlPath
+        New-InventoryHtml -Inventory $inventory -Path $htmlPath -ManualFields $manualFields
     }
 
     Write-Progress -Activity "Inventario de hardware" -Completed

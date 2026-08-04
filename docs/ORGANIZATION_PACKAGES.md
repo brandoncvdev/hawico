@@ -21,6 +21,11 @@ fallback.
   (see "Organization unit selection" below). Every other manual field, and
   `assignment.organizationUnitId` itself when no catalog is configured, still
   prompts free text.
+- An optional **`catalogs/departments.json`**, loaded by
+  `Get-InventoryDepartmentUnitCatalog`, covers institutions whose real
+  Dirección/Departamento data has no reliable parent-child relationship: a
+  second, independent flat catalog instead of a forced cascade (see
+  "Flat/independent mode" below).
 - **Custom-field definitions** (`custom-fields.json`) are loaded but not yet
   consumed anywhere — there is no per-field validation, type, or label
   rendering driven by them yet. That remains Fase 5 (interfaz
@@ -39,7 +44,8 @@ Config/Organizations/<organizationId>/
 ├── profiles/
 │   └── <profileId>.json
 ├── catalogs/
-│   └── organization-units.json
+│   ├── organization-units.json
+│   └── departments.json          # optional — flat/independent mode only
 └── custom-fields.json
 ```
 
@@ -199,6 +205,48 @@ The stored `FieldValue.Value` for both fields is the selected unit's
 (`docs/INSTITUTIONAL_EXCEL_MAPPING.md`) need the readable name. This is
 exactly what a technician would have typed by hand before, just without
 typos now.
+
+### Flat/independent mode: when Dirección and Departamento have no real hierarchy
+
+The cascade above assumes a genuine parent-child relationship: every
+Departamento is a real child of some Dirección in `organization-units.json`.
+Some institutions' actual data doesn't have that — `Config/Organizations/institucion-principal/`
+ships with 6 Direcciones and 48 Departamentos as **two separate, unrelated
+flat lists** (every unit has `parentId: null` in both catalogs). The row
+counts don't line up and there is no reliable way to derive which
+Departamento belongs to which Dirección without inventing data, so this
+package uses a second mode instead of forcing a fake cascade:
+
+- `catalogs/departments.json` (same `{units: [...]}` shape as
+  `organization-units.json`, loaded by `Get-InventoryDepartmentUnitCatalog
+  -BasePath -OrganizationId` in `Modules/InventoryOrganizationPackage.ps1`)
+  is a **second, independent** catalog — not a child list of anything.
+- `Start-Inventory.ps1` loads it the same way it loads `$organizationUnits`,
+  and forwards it as `$collectionArguments.DepartmentUnits`.
+  `Collector_Hardware_Inventory.ps1` resolves it through the same generic
+  `Resolve-InventoryOrganizationUnits -PassedUnits` used for
+  `-OrganizationUnits` (it is a plain array-shape resolver, not specific to
+  any one catalog) and forwards it to `Read-InventoryManualCapture
+  -DepartmentUnits`.
+- Inside `Read-InventoryManualCapture`: whenever `-DepartmentUnits` is
+  supplied and non-empty, `assignment.departmentUnitId` is answered by
+  picking from that **whole, independent catalog** — the same
+  `Read-InventoryOrganizationUnitSelection` menu mechanism as
+  `assignment.organizationUnitId` itself, never filtered by whatever
+  Dirección was just selected. This takes priority over the cascade even if
+  `-OrganizationUnits` also happens to carry a real hierarchy, since
+  supplying `-DepartmentUnits` is the explicit signal that this
+  organization's Departamento is not actually a child of Dirección.
+- When `-DepartmentUnits` is **not** supplied (empty, or the organization
+  has no `departments.json`), behavior is unchanged from the cascade
+  described above — this keeps `org-example` and any future organization
+  with a real hierarchy working exactly as before.
+
+In short: an organization ships **either** a nested `organization-units.json`
+(cascade) **or** a flat `organization-units.json` + `departments.json` pair
+(two independent picks) depending on what its real data supports — never
+both modes active for the same `assignment.departmentUnitId` field at once,
+since `-DepartmentUnits` always wins when present.
 
 ## Configuration
 

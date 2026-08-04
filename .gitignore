@@ -1,0 +1,8 @@
+# Real institutional data — organization structure, never sample/demo data.
+# Config/Organizations/org-example/ stays tracked on purpose (it's the
+# reference format, not real data). Add other real per-institution folders
+# here the same way if this repo is ever shared across institutions.
+Config/Organizations/institucion-principal/
+
+# Pester CI run artifact, not project output.
+testResults.xml

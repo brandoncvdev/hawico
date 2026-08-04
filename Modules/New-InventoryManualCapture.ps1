@@ -233,11 +233,13 @@ function Read-InventoryManualCapture {
         [Parameter(Mandatory)][string[]]$FieldKeys,
         [AllowNull()][string]$Technician,
         [scriptblock]$Prompter = { param($Key) Read-Host "  $Key" },
-        [AllowNull()][object[]]$OrganizationUnits = @()
+        [AllowNull()][object[]]$OrganizationUnits = @(),
+        [AllowNull()][object[]]$DepartmentUnits = @()
     )
 
     $manualFields = @()
     $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
+    $hasDepartmentUnits = @($DepartmentUnits).Count -gt 0
     # Set only while walking assignment.organizationUnitId, and read right
     # after by assignment.departmentUnitId (which must come later in
     # -FieldKeys for the cascade to work): the Id of whatever direction the
@@ -253,6 +255,21 @@ function Read-InventoryManualCapture {
         $rawValue = if ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
             $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter
             $selectedOrganizationUnitId = if ($null -ne $selection) { $selection.Id } else { $null }
+            if ($null -ne $selection) { $selection.Name } else { $null }
+        }
+        elseif ($key -eq 'assignment.departmentUnitId' -and $hasDepartmentUnits) {
+            # doc07-Catalog-System.md, flat/independent mode: some
+            # institutions' Dirección and Departamento have no reliable
+            # parent-child relationship to derive a cascade from (rows don't
+            # line up between the two lists). When -DepartmentUnits is
+            # supplied it is a second, wholly independent catalog picked the
+            # same way as assignment.organizationUnitId itself — never
+            # filtered by $selectedOrganizationUnitId. This takes priority
+            # over the cascade below even if -OrganizationUnits also happens
+            # to carry a real hierarchy, since supplying -DepartmentUnits is
+            # the explicit signal that this organization's Departamento is
+            # not actually a child of Dirección.
+            $selection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits -Prompter $Prompter
             if ($null -ne $selection) { $selection.Name } else { $null }
         }
         elseif ($key -eq 'assignment.departmentUnitId') {

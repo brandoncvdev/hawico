@@ -62,11 +62,22 @@ try {
         -BasePath $resolvedOrganizationPackagesBasePath `
         -OrganizationId $collectionSession.OrganizationId
 
+    # doc07-Catalog-System.md flat/independent mode: some institutions'
+    # Dirección and Departamento have no reliable parent-child relationship
+    # (rows in each list don't line up), so a second, independent
+    # catalogs/departments.json can be shipped alongside organization-units.json.
+    # When present, Read-InventoryManualCapture picks assignment.departmentUnitId
+    # from this whole catalog directly instead of cascading from $organizationUnits.
+    $departmentUnits = Get-InventoryDepartmentUnitCatalog `
+        -BasePath $resolvedOrganizationPackagesBasePath `
+        -OrganizationId $collectionSession.OrganizationId
+
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
         Technician = $collectionSession.Technician
         ManualFieldKeys = $manualFieldKeys
         OrganizationUnits = $organizationUnits
+        DepartmentUnits = $departmentUnits
     }
 
     function Wait-MenuInput {

@@ -35,6 +35,15 @@
         $script | Should -Match 'Resolve-InventoryOrganizationUnits'
     }
 
+    It 'accepts pre-resolved independent department units for the flat/independent departmentUnitId selection' {
+        # doc07-Catalog-System.md flat/independent mode: Resolve-InventoryOrganizationUnits
+        # is a generic array-shape resolver (not specific to any one catalog),
+        # reused here for -DepartmentUnits instead of a duplicate function.
+        $script | Should -Match '\[AllowNull\(\)\]\[object\[\]\]\$DepartmentUnits'
+        $script | Should -Match 'Resolve-InventoryOrganizationUnits\s+-PassedUnits\s+\$DepartmentUnits'
+        $script | Should -Match '-DepartmentUnits\s+\$resolvedDepartmentUnits'
+    }
+
     It 'comma-guards the empty-manual-fields fallback branch against the if-expression array-collapse bug' {
         # $manualFields = if (...) { Read-InventoryManualCapture ... } else { @() }
         # The else branch must be ,@() — a bare @() here collapses to $null when
@@ -47,6 +56,10 @@
 
     It 'passes the captured manual fields into the collection record' {
         $script | Should -Match '-ManualFields\s+\$manualFields'
+    }
+
+    It 'passes the captured manual fields into the HTML report as well' {
+        $script | Should -Match 'New-InventoryHtml\s+-Inventory\s+\$inventory\s+-Path\s+\$htmlPath\s+-ManualFields\s+\$manualFields'
     }
 
     It 'writes a distinct importable record without replacing legacy evidence' {

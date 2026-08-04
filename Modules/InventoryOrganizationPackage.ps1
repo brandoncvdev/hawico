@@ -155,6 +155,46 @@ function Get-InventoryOrganizationUnitCatalog {
     return ,@(@($parsed.units) | Where-Object { $null -ne $_ })
 }
 
+function Get-InventoryDepartmentUnitCatalog {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads an existing catalog file without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$BasePath,
+        [AllowNull()][string]$OrganizationId
+    )
+
+    # Same shape and degrade-without-throwing behavior as
+    # Get-InventoryOrganizationUnitCatalog above, but reading
+    # catalogs/departments.json: an institution whose Dirección/Departamento
+    # data has no reliable parent-child relationship (rows don't line up,
+    # nothing to derive a real hierarchy from without inventing it) ships a
+    # second, independent flat catalog instead of forcing a fake cascade.
+    $normalizedOrganizationId = Get-SafeString $OrganizationId
+    if ($null -eq $normalizedOrganizationId) {
+        return ,@()
+    }
+
+    $paths = Get-InventoryOrganizationPackagePath -BasePath $BasePath -OrganizationId $normalizedOrganizationId
+    $catalogFile = Join-Path $paths.CatalogsDirectory 'departments.json'
+
+    if (-not (Test-Path -LiteralPath $catalogFile)) {
+        return ,@()
+    }
+
+    try {
+        $parsed = Get-Content -LiteralPath $catalogFile -Raw | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        Write-Warning ("No se pudo leer el catálogo de departamentos de '{0}': {1}" -f $normalizedOrganizationId, $_.Exception.Message)
+        return ,@()
+    }
+
+    return ,@(@($parsed.units) | Where-Object { $null -ne $_ })
+}
+
 function Get-InventoryCustomFieldDefinitions {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',

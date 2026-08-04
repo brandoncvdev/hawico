@@ -251,6 +251,108 @@ Describe 'Read-InventoryManualCapture' {
         @($result).Count | Should -Be 0
         $calls.Count | Should -Be 0
     }
+
+    It 'picks assignment.departmentUnitId from its own independent, flat catalog when -DepartmentUnits is supplied, regardless of what was picked for Dirección' {
+        # institucion-principal's real data: Dirección and Departamento are
+        # two flat, unrelated lists (no reliable parent-child relationship
+        # between them) — assignment.departmentUnitId must offer the FULL
+        # department catalog, never filtered by whichever direction was
+        # selected just before it.
+        $directions = @(
+            [PSCustomObject]@{ id = 'dir-construccion'; name = 'CONSTRUCCION'; type = 'direction'; parentId = $null; sortOrder = 10 }
+        )
+        $departments = @(
+            [PSCustomObject]@{ id = 'dept-ti'; name = 'TI'; type = 'department'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-rh'; name = 'RECURSOS_HUMANOS'; type = 'department'; parentId = $null; sortOrder = 20 }
+        )
+        $answers = @('1', '2')
+        $state = [ordered]@{ Index = 0 }
+        $prompter = {
+            param($Key)
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                $value = $answers[$state.Index]
+                $state.Index++
+                return $value
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -OrganizationUnits $directions `
+            -DepartmentUnits $departments
+
+        @($result).Count | Should -Be 2
+        ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'CONSTRUCCION'
+        ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'RECURSOS_HUMANOS'
+    }
+
+    It 'offers the full independent department catalog even when Dirección was skipped with Enter' {
+        $departments = @(
+            [PSCustomObject]@{ id = 'dept-ti'; name = 'TI'; type = 'department'; parentId = $null; sortOrder = 10 }
+        )
+        # First menu prompt (Dirección) is skipped with Enter; second menu
+        # prompt (Departamento, from the independent catalog) picks option 1.
+        $answers = @('', '1')
+        $state = [ordered]@{ Index = 0 }
+        $prompter = {
+            param($Key)
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                $value = $answers[$state.Index]
+                $state.Index++
+                return $value
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Prompter $prompter `
+            -OrganizationUnits @([PSCustomObject]@{ id = 'dir-x'; name = 'X'; type = 'direction'; parentId = $null; sortOrder = 10 }) `
+            -DepartmentUnits $departments
+
+        @($result).Count | Should -Be 1
+        $result[0].Key | Should -Be 'assignment.departmentUnitId'
+        $result[0].Value | Should -Be 'TI'
+    }
+
+    It 'prefers the independent -DepartmentUnits catalog over the cascade when both are supplied' {
+        # A real parent-child hierarchy exists (org-example style) AND an
+        # independent department catalog was also passed in: the independent
+        # catalog wins, since it is the explicit signal that this
+        # organization's Departamento is not actually a child of Dirección.
+        $realHierarchy = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        $independentDepartments = @(
+            [PSCustomObject]@{ id = 'dept-only-independent'; name = 'Solo en catálogo independiente'; type = 'department'; parentId = $null; sortOrder = 10 }
+        )
+        $answers = @('2', '1')
+        $state = [ordered]@{ Index = 0 }
+        $prompter = {
+            param($Key)
+            if ($Key -eq 'Seleccione un número (Enter para omitir)') {
+                $value = $answers[$state.Index]
+                $state.Index++
+                return $value
+            }
+            return $null
+        }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId', 'assignment.departmentUnitId') `
+            -Technician 'Técnico 01' `
+            -Prompter $prompter `
+            -OrganizationUnits $realHierarchy `
+            -DepartmentUnits $independentDepartments
+
+        ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'Dirección Administrativa'
+        # If the cascade had been used instead, this would have been
+        # 'Recursos Humanos' (a real child of Dirección Administrativa in
+        # org-example's hierarchy) — asserting the independent-only name
+        # proves -DepartmentUnits took priority, not the cascade.
+        ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'Solo en catálogo independiente'
+    }
 }
 
 Describe 'ConvertTo-InventoryOrganizationUnitMenu' {
