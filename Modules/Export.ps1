@@ -210,7 +210,8 @@ function New-InventorySection {
 function New-InventoryHtml {
     param(
         [Parameter(Mandatory)][hashtable]$Inventory,
-        [Parameter(Mandatory)][string]$Path
+        [Parameter(Mandatory)][string]$Path,
+        [AllowNull()][object[]]$ManualFields = @()
     )
 
     $computer = $Inventory.Computer
@@ -235,6 +236,19 @@ $(New-InventoryMetric -Label "Sistema operativo" -Value $operatingSystem.Caption
 $(New-InventoryMetric -Label "Arquitectura" -Value $operatingSystem.Architecture)
 $(New-InventoryMetric -Label "Memoria instalada" -Value $memoryUpgrade.InstalledMemoryGB -Suffix " GB")
 $(New-InventoryMetric -Label "Discos físicos" -Value $storage.Upgrade.InstalledPhysicalDisks)
+</div>
+
+<div class="subsection">
+    <h3>Datos capturados en la visita</h3>
+    $(New-InventoryTable `
+        -Rows @($ManualFields) `
+        -Columns ([ordered]@{
+            "Campo" = "Key"
+            "Valor" = "Value"
+            "Fuente" = "Source"
+            "Capturado por" = "CapturedBy"
+        }) `
+        -EmptyMessage "No se capturaron datos manuales en esta visita.")
 </div>
 "@
 
