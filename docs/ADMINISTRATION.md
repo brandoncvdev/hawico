@@ -136,14 +136,61 @@ carrying `Source = 'ManualReview'` and `Confidence = 'Confirmed'`, records
 the previous value (or `null` if the key had none) in `ReviewHistory`, and
 returns the applied `FieldValue`.
 
+## Administration menu (`Start-Administration.ps1`)
+
+`Import-InventoryRecords.ps1` and `Export-InventoryWorkbook.ps1` remain
+available as single-purpose scripts, but `Start-Administration.ps1` is the
+actual administration interface `docs/13-Administration.md` asks for
+("Antes de una interfaz web, puede implementarse como: Script de
+consolidación, Archivos JSON, ... Reporte HTML"), tying import, the HTML
+report, manual review and the Excel export together in one menu — the same
+`do { Clear-Host; ...; switch ($option) {...} } while` pattern
+`Start-Inventory.ps1` already uses, so it doesn't introduce a second UX
+style:
+
+1. **Importar nuevas capturas** — runs `Import-InventoryAdministrationSession`,
+   prints the tray counts, writes an HTML report to
+   `Administracion/Reportes/Importacion-{yyyyMMdd-HHmmss}.html` via
+   `New-InventoryAdministrationReport`, and opens it.
+2. **Ver el último reporte de importación** — opens the most recent report in
+   that folder, or warns if none exists yet.
+3. **Resolver un conflicto manualmente** — prompts for `AssetId`, `Key`,
+   `NewValue`, `ReviewedBy` and an optional `Reason` (Enter to skip), then
+   calls `Add-InventoryAssetManualReview` and confirms the applied value.
+4. **Generar Excel consolidado** — runs `Export-InventoryConsolidatedWorkbook`
+   with the same `Consolidation` config block `Export-InventoryWorkbook.ps1`
+   already uses, and opens the result.
+5. **Abrir carpeta de administración** — opens the real `Administracion/`
+   folder (`Split-Path -Parent` of `Get-InventoryAssetStorePath`'s
+   `IndexPath`, not the configured `BasePath`, which is `Administracion/`'s
+   *parent*).
+6. **Salir**.
+
+### HTML report (`New-InventoryAdministrationReport`)
+
+`Modules/New-InventoryAdministrationReport.ps1` turns the object
+`Import-InventoryAdministrationSession` returns into one collapsible section
+per tray (`NuevosEquipos`, `EquiposActualizados`, `PosiblesDuplicados`,
+`Conflictos`, `ErroresRecoleccion`, plus `SkippedFiles` from
+`Get-InventoryConsolidatedRecords`), each with a row count badge and a table
+— or an "Sin elementos" placeholder when empty. It reuses
+`Modules/Export.ps1`'s existing `ConvertTo-HtmlSafe`, `Get-InventoryDisplayValue`,
+`New-InventorySection` and `New-InventoryTable` helpers and the exact same
+CSS (same variables, `.hero`/`.section`/`.table-wrap`/`.badge` classes) as
+the hardware-inventory HTML report, so it reads as part of the same product
+instead of a new design.
+
 ## Configuration
 
 ```json
 "Administration": {
   "RecordsPath": ".\\Output",
-  "BasePath": "."
+  "BasePath": ".",
+  "ReportsDirectory": ".\\Administracion\\Reportes"
 }
 ```
 
 `Import-InventoryRecords.ps1` reads this block and calls
 `Import-InventoryAdministrationSession`, printing the count for each tray.
+`Start-Administration.ps1` reads the same block (plus the existing
+`Consolidation` block from `docs/EXCEL_ENGINE.md`) — neither is duplicated.

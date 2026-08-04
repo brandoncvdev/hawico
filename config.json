@@ -29,7 +29,8 @@
   },
   "Administration": {
     "RecordsPath": ".\\Output",
-    "BasePath": "."
+    "BasePath": ".",
+    "ReportsDirectory": ".\\Administracion\\Reportes"
   },
   "OrganizationPackages": {
     "BasePath": ".\\Config\\Organizations"

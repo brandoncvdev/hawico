@@ -63,9 +63,11 @@ columns available today vs. pending, and the regeneration policy.
 store (`Administracion/`), assigning the permanent `AssetId` for the first
 time, matching returning equipment by serial/UUID, and sorting each record
 into `NuevosEquipos`, `EquiposActualizados`, `PosiblesDuplicados`,
-`Conflictos` or `ErroresRecoleccion`. See
+`Conflictos` or `ErroresRecoleccion`. `Start-Administration.ps1` ties import,
+an HTML report, manual conflict review and the consolidated Excel export
+into one menu — the actual administration interface. See
 [`docs/ADMINISTRATION.md`](docs/ADMINISTRATION.md) for the storage format,
-the import trays, and why there is no SQLite dependency yet.
+the import trays, the menu, and why there is no SQLite dependency yet.
 
 ## Organization packages
 

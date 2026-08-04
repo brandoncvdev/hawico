@@ -49,6 +49,7 @@ Describe 'config.json Administration contract' {
   $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
   $c.Administration.RecordsPath|Should -Be '.\Output'
   $c.Administration.BasePath|Should -Be '.'
+  $c.Administration.ReportsDirectory|Should -Be '.\Administracion\Reportes'
  }
 }
 
