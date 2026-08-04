@@ -54,6 +54,43 @@ function Get-CollectorVersion {
     return $version
 }
 
+function Install-InventoryImportExcelIfNeeded {
+    [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Installing a PowerShell module on user consent is this function''s explicit purpose.'
+    )]
+    param(
+        [scriptblock]$IsAvailable = { [bool](Get-Module -ListAvailable -Name ImportExcel) },
+        [scriptblock]$Confirm = { param($Prompt) Read-Host $Prompt },
+        [scriptblock]$Installer = { Install-Module ImportExcel -Scope CurrentUser -Force -ErrorAction Stop }
+    )
+
+    if (& $IsAvailable) {
+        return $true
+    }
+
+    $answer = & $Confirm 'El módulo ImportExcel no está instalado. ¿Instalarlo ahora? (S/N)'
+    $normalizedAnswer = Get-SafeString $answer
+
+    if ($null -eq $normalizedAnswer -or $normalizedAnswer -notmatch '^[sS]') {
+        return $false
+    }
+
+    try {
+        & $Installer | Out-Null
+    }
+    catch {
+        Write-Host ("No se pudo instalar ImportExcel: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        return $false
+    }
+
+    # Re-check instead of assuming success just because no exception was
+    # thrown — Install-Module can silently no-op in some environments.
+    return [bool](& $IsAvailable)
+}
+
 function Get-CimDataSafe {
     param(
         [Parameter(Mandatory)][string]$ClassName,

@@ -37,6 +37,11 @@ Describe 'Start-Administration.ps1 menu wiring' {
         $script | Should -Match 'Export-InventoryConsolidatedWorkbook'
     }
 
+    It 'offers to install ImportExcel on the spot instead of just printing the install command' {
+        $script | Should -Match 'Install-InventoryImportExcelIfNeeded'
+        $script | Should -Not -Match 'Get-Module -ListAvailable -Name ImportExcel'
+    }
+
     It 'follows the same menu loop and error handling pattern as Start-Inventory.ps1' {
         $script | Should -Match 'function Wait-MenuInput'
         $script | Should -Match 'do\s*\{'

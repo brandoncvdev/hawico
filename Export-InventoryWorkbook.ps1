@@ -14,9 +14,8 @@ try {
     . (Join-Path $basePath "Modules\Common.ps1")
     . (Join-Path $basePath "Modules\New-InventoryConsolidatedWorkbook.ps1")
 
-    if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
-        throw ("El módulo ImportExcel no está instalado. Ejecute: " +
-            "Install-Module ImportExcel -Scope CurrentUser -Force")
+    if (-not (Install-InventoryImportExcelIfNeeded)) {
+        throw "El módulo ImportExcel es necesario para generar el Excel consolidado."
     }
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json

@@ -168,10 +168,8 @@ try {
             }
 
             "4" {
-                if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
-                    Write-Host ""
-                    Write-Host ("El módulo ImportExcel no está instalado. Ejecute: " +
-                        "Install-Module ImportExcel -Scope CurrentUser -Force") -ForegroundColor Red
+                if (-not (Install-InventoryImportExcelIfNeeded)) {
+                    Write-Host "No se puede generar el Excel sin ImportExcel instalado." -ForegroundColor Yellow
                     Wait-MenuInput
                 }
                 else {
