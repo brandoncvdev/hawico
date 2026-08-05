@@ -26,6 +26,7 @@
             "CollectionId" = "CollectionId"
             "Equipo" = "ComputerName"
             "Sesión" = "SessionId"
+            "Técnico" = "Technician"
         }) -EmptyMessage "Sin elementos") `
         -Badge "$($nuevosEquipos.Count)" `
         -Open $true
@@ -38,6 +39,7 @@
             "CollectionId" = "CollectionId"
             "Equipo" = "ComputerName"
             "Sesión" = "SessionId"
+            "Técnico" = "Technician"
         }) -EmptyMessage "Sin elementos") `
         -Badge "$($equiposActualizados.Count)" `
         -Open $true
@@ -49,6 +51,7 @@
             "CollectionId" = "CollectionId"
             "Equipo" = "ComputerName"
             "Sesión" = "SessionId"
+            "Técnico" = "Technician"
         }) -EmptyMessage "Sin elementos") `
         -Badge "$($posiblesDuplicados.Count)" `
         -Open ($posiblesDuplicados.Count -gt 0)

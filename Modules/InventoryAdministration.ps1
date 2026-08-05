@@ -164,6 +164,7 @@ function Import-InventoryAdministrationSession {
                 CollectionId = $record.CollectionId
                 ComputerName = $record.ComputerName
                 SessionId = $record.SessionId
+                Technician = Get-InventoryRecordTechnician -ManualFields $record.ManualFields
             }
             continue
         }
@@ -221,6 +222,7 @@ function Import-InventoryAdministrationSession {
                 CollectionId = $record.CollectionId
                 ComputerName = $record.ComputerName
                 SessionId = $record.SessionId
+                Technician = Get-InventoryRecordTechnician -ManualFields $record.ManualFields
             }
         }
         else {
@@ -258,6 +260,7 @@ function Import-InventoryAdministrationSession {
                 CollectionId = $record.CollectionId
                 ComputerName = $record.ComputerName
                 SessionId = $record.SessionId
+                Technician = Get-InventoryRecordTechnician -ManualFields $record.ManualFields
             }
         }
     }

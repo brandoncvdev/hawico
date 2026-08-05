@@ -32,6 +32,31 @@ function Get-InventoryManualFieldValueByKey {
     return Get-SafeString $match.Value
 }
 
+function Get-InventoryRecordTechnician {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Projects an in-memory value without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$ManualFields
+    )
+
+    # CollectionRecord has no single top-level Technician field — the name is
+    # only ever stamped on ManualFields[].CapturedBy, once per field, all
+    # sharing the same value for one collection run (Read-InventoryManualCapture
+    # -Technician stamps every captured field with it). SessionId is a
+    # separate concept (groups equipment from the same visit), never the
+    # person's name — this reads the technician back from whichever field
+    # happens to carry it, instead of duplicating it onto the record schema.
+    $match = @($ManualFields) |
+        Where-Object { $null -ne $_ -and $null -ne (Get-SafeString $_.CapturedBy) } |
+        Select-Object -First 1
+
+    if ($null -eq $match) { return $null }
+    return Get-SafeString $match.CapturedBy
+}
+
 function Test-InventorySessionUnassigned {
     param([AllowNull()][string]$SessionId)
 

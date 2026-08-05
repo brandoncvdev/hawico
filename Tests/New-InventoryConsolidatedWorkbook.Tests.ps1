@@ -266,6 +266,37 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
     }
 }
 
+Describe 'Get-InventoryRecordTechnician' {
+    # CollectionRecord has no single top-level "Technician" field — the
+    # technician's name is only ever stamped on ManualFields[].CapturedBy,
+    # once per field, all sharing the same value for one collection run
+    # (Read-InventoryManualCapture -Technician stamps every captured field
+    # with it). This reads it back from whichever field is present, instead
+    # of duplicating a Technician property onto the record's own schema.
+    It 'reads the technician from the first manual field that has one' {
+        $manualFields = @(
+            [PSCustomObject]@{ Key = 'assignment.user.fullName'; Value = 'Juan Pérez'; CapturedBy = 'Técnico 01' }
+            [PSCustomObject]@{ Key = 'asset.assetTag'; Value = 'AT-001'; CapturedBy = 'Técnico 01' }
+        )
+
+        Get-InventoryRecordTechnician -ManualFields $manualFields | Should -Be 'Técnico 01'
+    }
+
+    It 'returns null without throwing when there are no manual fields at all' {
+        Get-InventoryRecordTechnician -ManualFields @() | Should -BeNullOrEmpty
+        Get-InventoryRecordTechnician -ManualFields $null | Should -BeNullOrEmpty
+    }
+
+    It 'skips a field with a blank CapturedBy and uses the next one that has a real value' {
+        $manualFields = @(
+            [PSCustomObject]@{ Key = 'assignment.user.fullName'; Value = 'Juan Pérez'; CapturedBy = $null }
+            [PSCustomObject]@{ Key = 'asset.assetTag'; Value = 'AT-001'; CapturedBy = 'Técnico 02' }
+        )
+
+        Get-InventoryRecordTechnician -ManualFields $manualFields | Should -Be 'Técnico 02'
+    }
+}
+
 Describe 'Get-InventoryConsolidatedRecords' {
     BeforeEach {
         $script:recordsDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))

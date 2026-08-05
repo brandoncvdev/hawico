@@ -224,6 +224,34 @@ Describe 'Import-InventoryAdministrationSession' {
         $fullNameField.Value | Should -Be 'Juan Pérez'
     }
 
+    It 'includes the technician (from ManualFields[].CapturedBy) alongside SessionId in NuevosEquipos, EquiposActualizados and PosiblesDuplicados' {
+        # SessionId groups equipment from the same visit; it is not the
+        # technician's name — that only ever lives on ManualFields[].CapturedBy.
+        # The administration report shows both, as separate columns.
+        $newEquipment = New-FixtureCollectionRecord -CollectionId 'COL-NEW' -ComputerName 'PC-NEW' `
+            -ManualFields @((New-FixtureManualField -Key 'assignment.user.fullName' -Value 'Juan Pérez' -CapturedBy 'Técnico 01'))
+        Write-FixtureRecordFile -Directory $script:recordsDir -Record $newEquipment
+
+        $noIdentity = New-FixtureCollectionRecord -CollectionId 'COL-DUP' -ComputerName 'PC-DUP' `
+            -PreferredIdentifier $null -AssetStatus 'NeedsReview' `
+            -ManualFields @((New-FixtureManualField -Key 'assignment.user.fullName' -Value 'Otra Persona' -CapturedBy 'Técnico 02'))
+        Write-FixtureRecordFile -Directory $script:recordsDir -Record $noIdentity
+
+        $firstResult = Import-InventoryAdministrationSession -RecordsPath $script:recordsDir -AdministrationBasePath $script:adminDir
+
+        $firstResult.NuevosEquipos[0].Technician | Should -Be 'Técnico 01'
+        $firstResult.PosiblesDuplicados[0].Technician | Should -Be 'Técnico 02'
+
+        Remove-Item -LiteralPath (Get-ChildItem -LiteralPath $script:recordsDir -Filter '*-record.json').FullName -Force
+        $updated = New-FixtureCollectionRecord -CollectionId 'COL-UPD' -ComputerName 'PC-NEW' `
+            -ManualFields @((New-FixtureManualField -Key 'assignment.user.fullName' -Value 'Juan Pérez' -CapturedBy 'Técnico 03'))
+        Write-FixtureRecordFile -Directory $script:recordsDir -Record $updated
+
+        $secondResult = Import-InventoryAdministrationSession -RecordsPath $script:recordsDir -AdministrationBasePath $script:adminDir
+
+        $secondResult.EquiposActualizados[0].Technician | Should -Be 'Técnico 03'
+    }
+
     It 'sends a differing value for an already-captured key to Conflictos without overwriting it' {
         $first = New-FixtureCollectionRecord -CollectionId 'COL-1' -ComputerName 'PC-01' `
             -ManualFields @((New-FixtureManualField -Key 'assignment.user.fullName' -Value 'Juan Pérez'))
