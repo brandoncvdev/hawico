@@ -6,3 +6,6 @@ Config/Organizations/institucion-principal/
 
 # Pester CI run artifact, not project output.
 testResults.xml
+
+# macOS Finder metadata.
+.DS_Store

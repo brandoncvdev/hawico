@@ -51,9 +51,20 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
-$jsonPath = Join-Path $outputDir "$hostname-$timestamp.json"
-$recordJsonPath = Join-Path $outputDir "$hostname-$timestamp-record.json"
-$htmlPath = Join-Path $outputDir "$hostname-$timestamp.html"
+
+# Every artifact for this computer lands under its own subfolder instead of
+# flat in OutputDirectory, grouping one machine's whole history together
+# (Modules\Common.ps1's Get-InventoryHostOutputDirectory). Record-discovery
+# for Excel consolidation and administration import already scans
+# recursively (Get-InventoryConsolidatedRecords -Recurse), so this does not
+# break either of those; only Start-Inventory.ps1's "abrir último
+# reporte"/"diagnóstico" menu options needed -Recurse added for the same reason.
+$hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostname
+New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
+
+$jsonPath = Join-Path $hostOutputDir "$hostname-$timestamp.json"
+$recordJsonPath = Join-Path $hostOutputDir "$hostname-$timestamp-record.json"
+$htmlPath = Join-Path $hostOutputDir "$hostname-$timestamp.html"
 $logPath = Join-Path $logDir "$hostname-$timestamp.log"
 
 try {

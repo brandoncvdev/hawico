@@ -11,4 +11,12 @@
  It 'collects the first extended diagnostic slice' {
   foreach($name in @('Get-ExtendedDiagnostics','Get-ProcessDiagnostic','Get-StartupDiagnostic','Get-InstalledSoftwareDiagnostic')){$script|Should -Match ([regex]::Escape($name))}
  }
+ It 'writes json/html inside a per-hostname subfolder, not flat in OutputDirectory, matching Collector_Hardware_Inventory.ps1' {
+  $script|Should -Match 'Get-InventoryHostOutputDirectory'
+  $script|Should -Match '\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostName'
+  $script|Should -Match '\$jsonPath\s*=\s*Join-Path\s+\$hostOutputDir'
+  $script|Should -Match '\$htmlPath\s*=\s*Join-Path\s+\$hostOutputDir'
+  # LogPath stays flat in LogDirectory — only "el output" was in scope.
+  $script|Should -Match '\$logPath\s*=\s*Join-Path\s+\$logDir'
+ }
 }

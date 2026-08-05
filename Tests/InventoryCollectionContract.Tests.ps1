@@ -79,6 +79,15 @@
         $script | Should -Match '\$collectionRecord\s*\|\s*ConvertTo-Json'
     }
 
+    It 'writes every output artifact inside a per-hostname subfolder, not flat in OutputDirectory, for easier per-computer administration' {
+        $script | Should -Match 'Get-InventoryHostOutputDirectory'
+        $script | Should -Match '\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostname'
+        $script | Should -Match 'New-Item\s+-ItemType\s+Directory\s+-Force\s+-Path\s+\$hostOutputDir'
+        $script | Should -Match '\$jsonPath\s*=\s*Join-Path\s+\$hostOutputDir'
+        $script | Should -Match '\$recordJsonPath\s*=\s*Join-Path\s+\$hostOutputDir'
+        $script | Should -Match '\$htmlPath\s*=\s*Join-Path\s+\$hostOutputDir'
+    }
+
     It 'resolves the collector version from the shared manifest instead of a hardcoded literal' {
         $script | Should -Match 'Get-CollectorVersion'
         $script | Should -Not -Match "'0\.5\.0'"

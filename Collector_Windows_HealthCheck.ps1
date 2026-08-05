@@ -43,8 +43,13 @@ New-Item -ItemType Directory -Force -Path $outputDir, $logDir | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $hostName = [string]$env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
 if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = 'UNKNOWN' }
-$jsonPath = Join-Path $outputDir "$hostName-$stamp-health.json"
-$htmlPath = Join-Path $outputDir "$hostName-$stamp-health.html"
+# Same per-hostname subfolder as Collector_Hardware_Inventory.ps1, so a
+# machine's health-check output lands next to its inventory instead of a
+# separate flat file elsewhere in OutputDirectory.
+$hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostName
+New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
+$jsonPath = Join-Path $hostOutputDir "$hostName-$stamp-health.json"
+$htmlPath = Join-Path $hostOutputDir "$hostName-$stamp-health.html"
 $logPath = Join-Path $logDir "$hostName-$stamp-health.log"
 $collectionTimer = [System.Diagnostics.Stopwatch]::StartNew()
 

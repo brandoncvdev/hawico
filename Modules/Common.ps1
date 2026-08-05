@@ -192,3 +192,24 @@ function Get-SystemSlotUsageName {
     if ($values.ContainsKey($value)) { return $values[$value] }
     return "Desconocido ($value)"
 }
+
+function Get-InventoryHostOutputDirectory {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Computes an in-memory path without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$BaseOutputDirectory,
+        [Parameter(Mandatory)][string]$Hostname
+    )
+
+    # Every artifact for one computer (inventory JSON/HTML, record.json,
+    # health-check JSON/HTML) lands under the same per-hostname subfolder
+    # instead of flat in OutputDirectory — grouping a machine's whole history
+    # together and cutting the clutter of one giant folder with every
+    # machine's files interleaved. Both collectors already sanitize the
+    # hostname before calling this, so it stays a pure Join-Path wrapper
+    # instead of duplicating that sanitization here.
+    return Join-Path $BaseOutputDirectory $Hostname
+}

@@ -99,6 +99,16 @@ reads every `*-record.json` under `RecordsPath` (via the same
 record into one of five trays, matching the subset of
 `docs/13-Administration.md`'s suggested trays this phase implements:
 
+`Get-InventoryConsolidatedRecords` has always scanned `-Recurse`, so
+`Collector_Hardware_Inventory.ps1`/`Collector_Windows_HealthCheck.ps1`
+writing each machine's output into its own `Output\<Hostname>\` subfolder
+(`Get-InventoryHostOutputDirectory`, `Modules\Common.ps1`, for easier
+per-computer administration) needed no change here at all — this import path
+and the Excel consolidation engine already tolerate any nesting under
+`RecordsPath`. Only `Start-Inventory.ps1`'s "abrir último reporte"/"abrir
+último diagnóstico" menu options needed `-Recurse` added, since those used a
+flat `Get-ChildItem` scan.
+
 | Tray | When |
 | --- | --- |
 | `NuevosEquipos` | Strong identity (`Asset.PreferredIdentifier` present), no existing match — a new `AssetId` is minted. |

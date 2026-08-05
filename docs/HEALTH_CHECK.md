@@ -675,11 +675,16 @@ respetando la política de privacidad.
 
 Se reutilizan las rutas configuradas en `OutputDirectory` y `LogDirectory`.
 
-Formato:
+Formato (`Modules\Common.ps1`, `Get-InventoryHostOutputDirectory`): el JSON y
+el HTML del diagnóstico caen en la misma subcarpeta por equipo que usa
+`Collector_Hardware_Inventory.ps1`, agrupando todo el historial de una
+computadora (inventario + salud) en un solo lugar en vez de un archivo suelto
+más entre cientos de otros equipos. El log sigue plano en `LogDirectory`
+(fuera del alcance de esta reorganización).
 
 ```text
-Output/<hostname>-<timestamp>-health.json
-Output/<hostname>-<timestamp>-health.html
+Output/<hostname>/<hostname>-<timestamp>-health.json
+Output/<hostname>/<hostname>-<timestamp>-health.html
 Logs/<hostname>-<timestamp>-health.log
 ```
 

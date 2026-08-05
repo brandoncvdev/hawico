@@ -186,3 +186,20 @@ Describe 'Install-InventoryImportExcelIfNeeded' {
         $calls.IsAvailable | Should -Be 1
     }
 }
+
+Describe 'Get-InventoryHostOutputDirectory' {
+    It 'joins the base output directory with the (already-sanitized) hostname' {
+        # Both collectors already sanitize $env:COMPUTERNAME
+        # (-replace '[^a-zA-Z0-9_-]', '_') before calling this, so this stays
+        # a pure Join-Path wrapper instead of duplicating that sanitization.
+        Get-InventoryHostOutputDirectory -BaseOutputDirectory 'C:\Output' -Hostname 'RH-PC-04' |
+            Should -Be (Join-Path 'C:\Output' 'RH-PC-04')
+    }
+
+    It 'groups every artifact for the same hostname under the same subfolder regardless of collection timestamp' {
+        $first = Get-InventoryHostOutputDirectory -BaseOutputDirectory 'C:\Output' -Hostname 'RH-PC-04'
+        $second = Get-InventoryHostOutputDirectory -BaseOutputDirectory 'C:\Output' -Hostname 'RH-PC-04'
+
+        $first | Should -Be $second
+    }
+}
