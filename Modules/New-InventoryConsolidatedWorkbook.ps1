@@ -252,6 +252,74 @@ function Get-InventoryConsolidatedRecords {
     }
 }
 
+function Get-InventoryDeduplicatedRecords {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Projects an in-memory record list without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$Records
+    )
+
+    # Bugfix: re-collecting the same physical computer (technician re-running
+    # "Generar inventario completo", or a follow-up visit) creates a
+    # brand-new *-record.json every time — by design, kept as an audit trail
+    # (doc06). Get-InventoryConsolidatedRecords reads every one of those
+    # files as-is; without this step, the same computer showed up once per
+    # collection instead of once per computer everywhere records feed into
+    # (Inventario/Pendientes/Resumen sheets, RecordCount). Same identity rule
+    # Modules/InventoryAdministration.ps1 already enforces
+    # (doc10-Asset-Identity.md): only records sharing a strong identity
+    # (SerialNumber or SystemUuid, Type AND Value matched together) are ever
+    # merged — a record with none is never merged with anything, since there
+    # is nothing safe to match it on. Keeps whichever duplicate has the most
+    # recent CollectedAt (the current known state of that computer).
+    $safeRecords = @(@($Records) | Where-Object { $null -ne $_ })
+
+    $latestByIdentity = [ordered]@{}
+    $withoutIdentity = @()
+
+    foreach ($record in $safeRecords) {
+        $identifier = $record.Asset.PreferredIdentifier
+        $identityType = if ($null -ne $identifier) { Get-SafeString $identifier.Type } else { $null }
+        $identityValue = if ($null -ne $identifier) { Get-SafeString $identifier.Value } else { $null }
+
+        if ($null -eq $identityType -or $null -eq $identityValue) {
+            $withoutIdentity += $record
+            continue
+        }
+
+        $identityKey = '{0}|{1}' -f $identityType, $identityValue
+        $existing = if ($latestByIdentity.Contains($identityKey)) { $latestByIdentity[$identityKey] } else { $null }
+
+        if ($null -eq $existing) {
+            $latestByIdentity[$identityKey] = $record
+            continue
+        }
+
+        $existingCollectedAt = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $existing.CollectedAt
+        $candidateCollectedAt = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $record.CollectedAt
+
+        # An unparsable/missing CollectedAt never displaces an already-kept
+        # record that has a real, comparable timestamp — better to keep a
+        # known snapshot than silently swap it for one we can't compare.
+        $shouldReplace = $false
+        if ($null -eq $existingCollectedAt -and $null -ne $candidateCollectedAt) {
+            $shouldReplace = $true
+        }
+        elseif ($null -ne $existingCollectedAt -and $null -ne $candidateCollectedAt -and $candidateCollectedAt -gt $existingCollectedAt) {
+            $shouldReplace = $true
+        }
+
+        if ($shouldReplace) {
+            $latestByIdentity[$identityKey] = $record
+        }
+    }
+
+    return ,@(@($latestByIdentity.Values) + $withoutIdentity)
+}
+
 function Get-InventoryPendingReviewRows {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
@@ -349,7 +417,17 @@ function Export-InventoryConsolidatedWorkbook {
     }
 
     $collected = Get-InventoryConsolidatedRecords -RecordsPath $RecordsPath
-    $records = @($collected.Records)
+    # Bugfix: re-collecting the same computer used to add another full row
+    # to Inventario per collection instead of per computer, since every
+    # *-record.json file (kept as an audit trail by design) was projected
+    # 1:1 into a row. Deduplicated once here, before any sheet is built, so
+    # Inventario/Pendientes/Resumen and RecordCount all agree with each other.
+    # No extra @() around this call: Get-InventoryDeduplicatedRecords already
+    # returns a correctly-flat array via its own ,@() return guard — wrapping
+    # an already comma-guarded call in another @() re-nests it into a
+    # 1-element array whose sole element is the real array (same footgun the
+    # comment below already warns about for the two calls right after this).
+    $records = Get-InventoryDeduplicatedRecords -Records $collected.Records
     $skipped = @($collected.Skipped)
 
     # No extra @() around the two calls below: Get-InventoryPendingReviewRows

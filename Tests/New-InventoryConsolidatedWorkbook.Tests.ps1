@@ -11,6 +11,8 @@
             [string]$CollectionId = 'COL-20260803-123000-ABC12345',
             [string]$ComputerName = 'RH-PC-04',
             [string]$AssetStatus = 'Identified',
+            [AllowNull()][object]$PreferredIdentifier = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'ABC12345' },
+            [AllowNull()][string]$CollectedAt = '2026-08-03T12:30:00-06:00',
             [AllowNull()][string]$SessionId = 'SES-20260803-AM-RH',
             [AllowNull()][object[]]$ManualFields = @(
                 [PSCustomObject]@{
@@ -71,11 +73,11 @@
                 Manufacturer = 'Dell Inc.'
                 Model = 'OptiPlex 7090'
                 ComputerName = $ComputerName
-                PreferredIdentifier = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'ABC12345' }
+                PreferredIdentifier = $PreferredIdentifier
                 Status = $AssetStatus
             }
             SessionId = $SessionId
-            CollectedAt = '2026-08-03T12:30:00-06:00'
+            CollectedAt = $CollectedAt
             CollectorVersion = '0.5.0'
             ComputerName = $ComputerName
             TechnicalData = [PSCustomObject]@{
@@ -345,6 +347,84 @@ Describe 'Get-InventoryConsolidatedRecords' {
     }
 }
 
+Describe 'Get-InventoryDeduplicatedRecords' {
+    # Bugfix: re-collecting the same physical computer (technician re-running
+    # "Generar inventario completo", or a second visit) creates a brand-new
+    # *-record.json every time (by design — kept as an audit trail). Without
+    # this, every one of those files became its own row in the Inventario
+    # sheet — the same computer showing up once per collection instead of
+    # once per computer. Same identity rule Modules/InventoryAdministration.ps1
+    # already enforces (doc10-Asset-Identity.md): only records sharing a
+    # strong identity (SerialNumber or SystemUuid, matched on Type AND Value
+    # together) are ever merged; anything without one is left exactly as-is.
+    # Each identifier is built fresh inside its own It block (not shared at
+    # Describe scope) to stay clear of Pester's discovery-vs-run phase
+    # variable-scoping rules.
+
+    It 'keeps only the most recently collected record when two share the same strong identity' {
+        $sameSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'SAME-001' }
+        $older = New-FixtureRecord -CollectionId 'COL-OLDER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-01T09:00:00-06:00'
+        $newer = New-FixtureRecord -CollectionId 'COL-NEWER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-03T09:00:00-06:00'
+
+        $result = Get-InventoryDeduplicatedRecords -Records @($older, $newer)
+
+        @($result).Count | Should -Be 1
+        $result[0].CollectionId | Should -Be 'COL-NEWER'
+    }
+
+    It 'is order-independent — the same result whether the newer record appears first or last' {
+        $sameSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'SAME-001' }
+        $older = New-FixtureRecord -CollectionId 'COL-OLDER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-01T09:00:00-06:00'
+        $newer = New-FixtureRecord -CollectionId 'COL-NEWER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-03T09:00:00-06:00'
+
+        $result = Get-InventoryDeduplicatedRecords -Records @($newer, $older)
+
+        @($result).Count | Should -Be 1
+        $result[0].CollectionId | Should -Be 'COL-NEWER'
+    }
+
+    It 'keeps records with different identities as separate rows' {
+        $sameSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'SAME-001' }
+        $otherSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'OTHER-002' }
+        $first = New-FixtureRecord -CollectionId 'COL-A' -PreferredIdentifier $sameSerial
+        $second = New-FixtureRecord -CollectionId 'COL-B' -PreferredIdentifier $otherSerial
+
+        $result = Get-InventoryDeduplicatedRecords -Records @($first, $second)
+
+        @($result).Count | Should -Be 2
+        (@($result) | ForEach-Object { $_.CollectionId }) | Should -Contain 'COL-A'
+        (@($result) | ForEach-Object { $_.CollectionId }) | Should -Contain 'COL-B'
+    }
+
+    It 'never merges records with no strong identity, even if there is more than one' {
+        $first = New-FixtureRecord -CollectionId 'COL-NR-1' -PreferredIdentifier $null -AssetStatus 'NeedsReview'
+        $second = New-FixtureRecord -CollectionId 'COL-NR-2' -PreferredIdentifier $null -AssetStatus 'NeedsReview'
+
+        $result = Get-InventoryDeduplicatedRecords -Records @($first, $second)
+
+        @($result).Count | Should -Be 2
+    }
+
+    It 'returns an array, not a bare scalar, when deduplication collapses everything to exactly one record' {
+        $sameSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'SAME-001' }
+        $older = New-FixtureRecord -CollectionId 'COL-OLDER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-01T09:00:00-06:00'
+        $newer = New-FixtureRecord -CollectionId 'COL-NEWER' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-03T09:00:00-06:00'
+
+        $result = Get-InventoryDeduplicatedRecords -Records @($older, $newer)
+
+        $result.GetType().IsArray | Should -BeTrue
+    }
+
+    It 'returns an empty array without throwing when Records is null or empty' {
+        $fromNull = Get-InventoryDeduplicatedRecords -Records $null
+        $fromEmpty = Get-InventoryDeduplicatedRecords -Records @()
+
+        $fromNull.GetType().IsArray | Should -BeTrue
+        $fromNull.Count | Should -Be 0
+        $fromEmpty.Count | Should -Be 0
+    }
+}
+
 Describe 'Get-InventoryPendingReviewRows' {
     It 'flags identity, session and user capture gaps with readable reasons' {
         $clean = New-FixtureRecord -CollectionId 'COL-CLEAN'
@@ -419,7 +499,7 @@ Describe 'Export-InventoryConsolidatedWorkbook' -Skip:(-not (Get-Module -ListAva
 
         (New-FixtureRecord -CollectionId 'COL-EXPORT-1') | ConvertTo-Json -Depth 10 |
             Set-Content -LiteralPath (Join-Path $recordsDir 'PC-01-record.json') -Encoding UTF8
-        (New-FixtureRecord -CollectionId 'COL-EXPORT-2' -AssetStatus 'NeedsReview' -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
+        (New-FixtureRecord -CollectionId 'COL-EXPORT-2' -AssetStatus 'NeedsReview' -PreferredIdentifier $null -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
             ConvertTo-Json -Depth 10 |
             Set-Content -LiteralPath (Join-Path $recordsDir 'PC-02-record.json') -Encoding UTF8
 
@@ -452,10 +532,10 @@ Describe 'Export-InventoryConsolidatedWorkbook' -Skip:(-not (Get-Module -ListAva
         $recordsDir = Join-Path $TestDrive 'export-pending-count'
         New-Item -ItemType Directory -Path $recordsDir -Force | Out-Null
 
-        (New-FixtureRecord -CollectionId 'COL-PENDING-1' -AssetStatus 'NeedsReview' -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
+        (New-FixtureRecord -CollectionId 'COL-PENDING-1' -AssetStatus 'NeedsReview' -PreferredIdentifier $null -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
             ConvertTo-Json -Depth 10 |
             Set-Content -LiteralPath (Join-Path $recordsDir 'PC-01-record.json') -Encoding UTF8
-        (New-FixtureRecord -CollectionId 'COL-PENDING-2' -AssetStatus 'NeedsReview' -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
+        (New-FixtureRecord -CollectionId 'COL-PENDING-2' -AssetStatus 'NeedsReview' -PreferredIdentifier $null -SessionId 'SES-UNASSIGNED' -ManualFields @()) |
             ConvertTo-Json -Depth 10 |
             Set-Content -LiteralPath (Join-Path $recordsDir 'PC-02-record.json') -Encoding UTF8
 
@@ -469,6 +549,28 @@ Describe 'Export-InventoryConsolidatedWorkbook' -Skip:(-not (Get-Module -ListAva
         $pendientesRows.Count | Should -Be 2
     }
 
+    It 'shows only one Inventario row when the same computer was collected more than once (bugfix: repeated "Generar inventario completo" runs used to duplicate rows)' {
+        $recordsDir = Join-Path $TestDrive 'export-same-computer-twice'
+        New-Item -ItemType Directory -Path $recordsDir -Force | Out-Null
+
+        $sameSerial = [PSCustomObject]@{ Type = 'SerialNumber'; Value = 'REPEAT-001' }
+        (New-FixtureRecord -CollectionId 'COL-FIRST-VISIT' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-01T09:00:00-06:00') |
+            ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $recordsDir 'PC-01-20260801-record.json') -Encoding UTF8
+        (New-FixtureRecord -CollectionId 'COL-SECOND-VISIT' -PreferredIdentifier $sameSerial -CollectedAt '2026-08-03T09:00:00-06:00') |
+            ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $recordsDir 'PC-01-20260803-record.json') -Encoding UTF8
+
+        $outputPath = Join-Path $TestDrive 'Consolidado-SameComputer.xlsx'
+
+        $result = Export-InventoryConsolidatedWorkbook -RecordsPath $recordsDir -OutputPath $outputPath
+
+        $result.RecordCount | Should -Be 1
+
+        $inventoryRows = @(Import-Excel -Path $outputPath -WorksheetName 'Inventario')
+        $inventoryRows.Count | Should -Be 1
+    }
+
     It 'regenerates the workbook from scratch instead of accumulating stale sheets' {
         $recordsDir = Join-Path $TestDrive 'export-regen'
         New-Item -ItemType Directory -Path $recordsDir -Force | Out-Null
@@ -480,7 +582,12 @@ Describe 'Export-InventoryConsolidatedWorkbook' -Skip:(-not (Get-Module -ListAva
         Export-InventoryConsolidatedWorkbook -RecordsPath $recordsDir -OutputPath $outputPath | Out-Null
         $firstRun = @(Import-Excel -Path $outputPath -WorksheetName 'Inventario')
 
-        (New-FixtureRecord -CollectionId 'COL-REGEN-2') | ConvertTo-Json -Depth 10 |
+        # A genuinely different second computer (distinct identity), not a
+        # re-collection of the same one — otherwise Get-InventoryDeduplicatedRecords
+        # would correctly collapse them to 1 row, defeating this test's real
+        # purpose (checking regeneration, not deduplication).
+        (New-FixtureRecord -CollectionId 'COL-REGEN-2' -PreferredIdentifier ([PSCustomObject]@{ Type = 'SerialNumber'; Value = 'REGEN-002' })) |
+            ConvertTo-Json -Depth 10 |
             Set-Content -LiteralPath (Join-Path $recordsDir 'PC-02-record.json') -Encoding UTF8
         Export-InventoryConsolidatedWorkbook -RecordsPath $recordsDir -OutputPath $outputPath | Out-Null
         $secondRun = @(Import-Excel -Path $outputPath -WorksheetName 'Inventario')
