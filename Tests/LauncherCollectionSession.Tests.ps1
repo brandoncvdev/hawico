@@ -85,4 +85,19 @@
         # instead of arriving too late to matter.
         $script | Should -Match '(?s)Get-InventoryAutoDetectedOrganizationId.*?New-InventoryCollectionSession\s+@sessionParameters'
     }
+
+    It 'builds readable field labels combining the hardcoded defaults with the active organization''s custom-fields.json' {
+        # "Labels legibles" task: the technician sees "Dirección" / "Número
+        # patrimonial" / etc. instead of the raw assignment.organizationUnitId
+        # / asset.assetTag dotted keys, both in the per-machine capture and in
+        # the reusable visit-context prompts.
+        $script | Should -Match 'Get-InventoryCustomFieldDefinitions'
+        $script | Should -Match '\$fieldLabels\s*='
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*FieldLabels\s*=\s*\$fieldLabels[^}]*\}'
+    }
+
+    It 'forwards the readable field labels into the reusable visit context' {
+        $script | Should -Match '(?s)function\s+Read-InventoryVisitContext\s*\{.*?\$FieldLabels'
+        $script | Should -Match '(?s)\$visitContext\s*=\s*Read-InventoryVisitContext.*?-FieldLabels\s+\$fieldLabels'
+    }
 }

@@ -49,6 +49,11 @@
         $script | Should -Match '-PresetValues\s+\$PresetManualFieldValues'
     }
 
+    It 'accepts readable field labels for the manual capture prompts instead of raw dotted keys' {
+        $script | Should -Match '\[AllowNull\(\)\]\[hashtable\]\$FieldLabels'
+        $script | Should -Match '-FieldLabels\s+\$FieldLabels'
+    }
+
     It 'comma-guards the empty-manual-fields fallback branch against the if-expression array-collapse bug' {
         # $manualFields = if (...) { Read-InventoryManualCapture ... } else { @() }
         # The else branch must be ,@() — a bare @() here collapses to $null when

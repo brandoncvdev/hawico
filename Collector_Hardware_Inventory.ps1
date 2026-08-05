@@ -7,7 +7,8 @@ param(
     [AllowNull()][string[]]$ManualFieldKeys = $null,
     [AllowNull()][object[]]$OrganizationUnits = $null,
     [AllowNull()][object[]]$DepartmentUnits = $null,
-    [AllowNull()][hashtable]$PresetManualFieldValues = $null
+    [AllowNull()][hashtable]$PresetManualFieldValues = $null,
+    [AllowNull()][hashtable]$FieldLabels = $null
 )
 
 Set-StrictMode -Version Latest
@@ -154,7 +155,7 @@ try {
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
             -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits `
-            -PresetValues $PresetManualFieldValues
+            -PresetValues $PresetManualFieldValues -FieldLabels $FieldLabels
     }
     else {
         ,@()

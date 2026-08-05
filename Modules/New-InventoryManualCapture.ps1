@@ -29,6 +29,188 @@
     }
 }
 
+function Get-InventoryDefaultFieldLabel {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Looks up a hardcoded label without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$Key
+    )
+
+    # Same 6 field keys config.json/org packages already ask about
+    # (docs/07-Catalog-System.md, docs/INSTITUTIONAL_EXCEL_MAPPING.md); text
+    # kept consistent with labels already used elsewhere in the project
+    # (custom-fields.json's "label" for these same two keys, for instance).
+    $defaultLabels = @{
+        'assignment.user.fullName' = 'Nombre completo del usuario'
+        'assignment.organizationUnitId' = 'Dirección'
+        'assignment.departmentUnitId' = 'Departamento'
+        'assignment.locationId' = 'Ubicación'
+        'asset.assetTag' = 'Número patrimonial'
+        'collection.observations' = 'Observaciones'
+    }
+
+    if ($defaultLabels.ContainsKey($Key)) {
+        return $defaultLabels[$Key]
+    }
+
+    return $null
+}
+
+function Get-InventoryFieldLabel {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Resolves a display label without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [AllowNull()][hashtable]$FieldLabels = @{}
+    )
+
+    # Priority: an organization's own custom-fields.json label (loaded by
+    # Get-InventoryCustomFieldDefinitions) wins over the hardcoded default,
+    # which wins over showing the raw dotted key as a last resort — should
+    # only happen for a custom field the organization never labeled.
+    if ($null -ne $FieldLabels -and $FieldLabels.ContainsKey($Key)) {
+        return $FieldLabels[$Key]
+    }
+
+    $defaultLabel = Get-InventoryDefaultFieldLabel -Key $Key
+    if ($null -ne $defaultLabel) {
+        return $defaultLabel
+    }
+
+    return $Key
+}
+
+function ConvertTo-InventoryOrganizationUnitMenuEntries {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Formats an in-memory menu into display strings without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$Menu
+    )
+
+    # Extracted out of the `for` loop that used to Write-Host each line
+    # directly inside Read-InventoryOrganizationUnitSelection, so the exact
+    # print format (number + Depth-based indent + Name) is directly testable
+    # and reusable by the multi-column layout below.
+    $safeMenu = @(@($Menu) | Where-Object { $null -ne $_ })
+
+    $entries = @()
+    for ($i = 0; $i -lt $safeMenu.Count; $i++) {
+        $indent = '  ' * $safeMenu[$i].Depth
+        $entries += "{0,2}. {1}{2}" -f ($i + 1), $indent, $safeMenu[$i].Name
+    }
+
+    return ,@($entries)
+}
+
+function Get-InventoryMenuColumnCount {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Computes a layout number without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][int]$MaxEntryWidth,
+        [AllowNull()][object]$ConsoleWidth
+    )
+
+    # Console width unknown/non-positive (piped output, redirected host,
+    # etc.): 2 fixed columns is the safe default the user asked for.
+    if ($null -eq $ConsoleWidth -or [int]$ConsoleWidth -le 0) {
+        return 2
+    }
+
+    $cellWidth = $MaxEntryWidth + 4
+    $columnsThatFit = [Math]::Floor([int]$ConsoleWidth / $cellWidth)
+
+    if ($columnsThatFit -ge 3) {
+        return 3
+    }
+
+    return 2
+}
+
+function Format-InventoryMenuColumns {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Formats in-memory strings into printable lines without changing system state.'
+    )]
+    param(
+        [AllowNull()][string[]]$Entries,
+        [Parameter(Mandatory)][int]$Columns
+    )
+
+    $safeEntries = @(@($Entries) | Where-Object { $null -ne $_ })
+
+    if ($safeEntries.Count -eq 0) {
+        return ,@()
+    }
+
+    $cellWidth = (($safeEntries | Measure-Object -Property Length -Maximum).Maximum) + 4
+    $rowCount = [Math]::Ceiling($safeEntries.Count / $Columns)
+
+    $lines = @()
+    for ($row = 0; $row -lt $rowCount; $row++) {
+        $lineParts = @()
+        for ($col = 0; $col -lt $Columns; $col++) {
+            $index = $row * $Columns + $col
+            if ($index -ge $safeEntries.Count) {
+                break
+            }
+
+            # Row-major fill (item 1 top-left, item 2 to its right, ...): no
+            # padding on the last cell of a row — either the row is full
+            # (last column) or the catalog ran out of items (last overall
+            # entry) — so no trailing spaces are ever printed.
+            $isLastCellInRow = ($col -eq $Columns - 1) -or ($index -eq $safeEntries.Count - 1)
+            if ($isLastCellInRow) {
+                $lineParts += $safeEntries[$index]
+            }
+            else {
+                $lineParts += $safeEntries[$index].PadRight($cellWidth)
+            }
+        }
+        $lines += ($lineParts -join '')
+    }
+
+    return ,@($lines)
+}
+
+function Get-InventoryConsoleWidth {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads the host console width without changing system state.'
+    )]
+    param()
+
+    # Thin, deliberately non-pure wrapper around $Host.UI.RawUI: behaves
+    # differently in a real Windows console vs. a non-interactive host (like
+    # Pester's), so the only thing worth guaranteeing here is "never throws,
+    # never returns a bogus non-positive width" — Get-InventoryMenuColumnCount
+    # already treats $null the same as "could not be determined".
+    try {
+        $width = $Host.UI.RawUI.WindowSize.Width
+        if ($width -gt 0) {
+            return $width
+        }
+
+        return $null
+    }
+    catch {
+        return $null
+    }
+}
+
 function Get-InventoryOrganizationUnitMenuChildren {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
@@ -140,7 +322,8 @@ function Read-InventoryOrganizationUnitSelection {
     )]
     param(
         [AllowNull()][object[]]$Units,
-        [scriptblock]$Prompter = { param($Key) Read-Host "  $Key" }
+        [scriptblock]$Prompter = { param($Key) Read-Host "  $Key" },
+        [AllowNull()][string]$Label = $null
     )
 
     # No extra @() around this call: ConvertTo-InventoryOrganizationUnitMenu
@@ -158,9 +341,26 @@ function Read-InventoryOrganizationUnitSelection {
     }
 
     Write-Host ""
-    for ($i = 0; $i -lt $menu.Count; $i++) {
-        $indent = '  ' * $menu[$i].Depth
-        Write-Host ("  {0,2}. {1}{2}" -f ($i + 1), $indent, $menu[$i].Name)
+    if (-not [string]::IsNullOrWhiteSpace($Label)) {
+        # "Labels legibles" task: identifies which field this catalog menu
+        # is for (e.g. "Dirección"), since none of the prompts below it ever
+        # print the field key/label on their own.
+        Write-Host "  ${Label}:"
+    }
+
+    # 2-or-3-column layout instead of one item per line: with real catalogs
+    # (48 departments in institucion-principal, for instance) a single
+    # column means a lot of vertical scroll. Console width detection is
+    # isolated in Get-InventoryConsoleWidth (thin, non-pure) so the actual
+    # layout math (these three calls) stays pure and testable.
+    $entries = ConvertTo-InventoryOrganizationUnitMenuEntries -Menu $menu
+    $maxEntryWidth = ($entries | Measure-Object -Property Length -Maximum).Maximum
+    $consoleWidth = Get-InventoryConsoleWidth
+    $columns = Get-InventoryMenuColumnCount -MaxEntryWidth $maxEntryWidth -ConsoleWidth $consoleWidth
+    $lines = Format-InventoryMenuColumns -Entries $entries -Columns $columns
+
+    foreach ($line in $lines) {
+        Write-Host "  $line"
     }
 
     while ($true) {
@@ -235,7 +435,8 @@ function Read-InventoryManualCapture {
         [scriptblock]$Prompter = { param($Key) Read-Host "  $Key" },
         [AllowNull()][object[]]$OrganizationUnits = @(),
         [AllowNull()][object[]]$DepartmentUnits = @(),
-        [AllowNull()][hashtable]$PresetValues = @{}
+        [AllowNull()][hashtable]$PresetValues = @{},
+        [AllowNull()][hashtable]$FieldLabels = @{}
     )
 
     $manualFields = @()
@@ -263,7 +464,8 @@ function Read-InventoryManualCapture {
         # text — but only for this one field, and only when a catalog was
         # actually supplied (backward-compatible free text otherwise).
         elseif ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
-            $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter
+            $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
+            $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter -Label $fieldLabel
             $selectedOrganizationUnitId = if ($null -ne $selection) { $selection.Id } else { $null }
             if ($null -ne $selection) { $selection.Name } else { $null }
         }
@@ -279,7 +481,8 @@ function Read-InventoryManualCapture {
             # to carry a real hierarchy, since supplying -DepartmentUnits is
             # the explicit signal that this organization's Departamento is
             # not actually a child of Dirección.
-            $selection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits -Prompter $Prompter
+            $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
+            $selection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits -Prompter $Prompter -Label $fieldLabel
             if ($null -ne $selection) { $selection.Name } else { $null }
         }
         elseif ($key -eq 'assignment.departmentUnitId') {
@@ -297,7 +500,8 @@ function Read-InventoryManualCapture {
             }
 
             if (@($childUnits).Count -gt 0) {
-                $selection = Read-InventoryOrganizationUnitSelection -Units $childUnits -Prompter $Prompter
+                $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
+                $selection = Read-InventoryOrganizationUnitSelection -Units $childUnits -Prompter $Prompter -Label $fieldLabel
                 if ($null -ne $selection) { $selection.Name } else { $null }
             }
             else {
@@ -305,7 +509,8 @@ function Read-InventoryManualCapture {
             }
         }
         else {
-            & $Prompter $key
+            $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
+            & $Prompter $fieldLabel
         }
 
         $fieldValue = New-InventoryManualFieldValue -Key $key -RawValue $rawValue -Technician $Technician

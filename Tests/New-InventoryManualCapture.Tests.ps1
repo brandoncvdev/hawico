@@ -55,11 +55,14 @@ Describe 'New-InventoryManualFieldValue' {
 }
 
 Describe 'Read-InventoryManualCapture' {
-    It 'visits every field key in order using the injected prompter' {
+    It 'visits every field using its resolved label (not the raw key) in order, via the injected prompter' {
+        # Task "labels legibles": the free-text prompter now receives the
+        # human-readable label (default label map, since no -FieldLabels
+        # override was supplied here), not the raw dotted field key.
         $visited = [System.Collections.Generic.List[string]]::new()
         $answers = @{
-            'assignment.user.fullName' = 'Juan Pérez Hernández'
-            'assignment.organizationUnitId' = 'dept-hr'
+            'Nombre completo del usuario' = 'Juan Pérez Hernández'
+            'Dirección' = 'dept-hr'
         }
         $prompter = {
             param($Key)
@@ -72,8 +75,10 @@ Describe 'Read-InventoryManualCapture' {
             -Technician 'Técnico 01' `
             -Prompter $prompter
 
-        @($visited) | Should -Be @('assignment.user.fullName', 'assignment.organizationUnitId')
+        @($visited) | Should -Be @('Nombre completo del usuario', 'Dirección')
         @($result).Count | Should -Be 2
+        # The stored FieldValue.Key is still the raw dotted key — only the
+        # interactive prompt text changed, not what gets persisted.
         $result[0].Key | Should -Be 'assignment.user.fullName'
         $result[0].Value | Should -Be 'Juan Pérez Hernández'
         $result[1].Key | Should -Be 'assignment.organizationUnitId'
@@ -82,9 +87,9 @@ Describe 'Read-InventoryManualCapture' {
 
     It 'omits fields skipped with Enter and keeps the ones that were answered' {
         $answers = @{
-            'assignment.user.fullName' = ''
-            'assignment.organizationUnitId' = 'dept-hr'
-            'asset.assetTag' = '   '
+            'Nombre completo del usuario' = ''
+            'Dirección' = 'dept-hr'
+            'Número patrimonial' = '   '
         }
         $prompter = { param($Key) $answers[$Key] }
 
@@ -132,7 +137,7 @@ Describe 'Read-InventoryManualCapture' {
             [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
             [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'site-center'; sortOrder = 20 }
         )
-        $freeTextResponses = @{ 'assignment.user.fullName' = 'Juan Pérez' }
+        $freeTextResponses = @{ 'Nombre completo del usuario' = 'Juan Pérez' }
         $calls = [ordered]@{ Menu = 0 }
         $prompter = {
             param($Key)
@@ -376,7 +381,7 @@ Describe 'Read-InventoryManualCapture' {
 
     It 'a preset key coexists with other keys that are still prompted normally in the same call' {
         $calls = [System.Collections.Generic.List[string]]::new()
-        $answers = @{ 'assignment.user.fullName' = 'Juan Pérez'; 'asset.assetTag' = 'AT-001' }
+        $answers = @{ 'Nombre completo del usuario' = 'Juan Pérez'; 'Número patrimonial' = 'AT-001' }
         $prompter = { param($Key) $calls.Add($Key); $answers[$Key] }
 
         $result = Read-InventoryManualCapture `
@@ -385,8 +390,9 @@ Describe 'Read-InventoryManualCapture' {
             -Prompter $prompter `
             -PresetValues @{ 'assignment.departmentUnitId' = 'TI' }
 
-        # Only the two non-preset keys ever reach the prompter, in order.
-        @($calls) | Should -Be @('assignment.user.fullName', 'asset.assetTag')
+        # Only the two non-preset keys ever reach the prompter (by their
+        # resolved label), in order.
+        @($calls) | Should -Be @('Nombre completo del usuario', 'Número patrimonial')
         @($result).Count | Should -Be 3
         ($result | Where-Object { $_.Key -eq 'assignment.user.fullName' }).Value | Should -Be 'Juan Pérez'
         ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'TI'
@@ -408,6 +414,59 @@ Describe 'Read-InventoryManualCapture' {
 
         $calls.Count | Should -Be 0
         $result[0].Value | Should -Be 'Valor preseteado'
+    }
+
+    It 'uses an organization-supplied label (FieldLabels, e.g. from custom-fields.json) for the free-text prompt instead of the raw key' {
+        $calls = [System.Collections.Generic.List[string]]::new()
+        $prompter = { param($Key) $calls.Add($Key); 'algún valor' }
+
+        Read-InventoryManualCapture `
+            -FieldKeys @('asset.assetTag') `
+            -Prompter $prompter `
+            -FieldLabels @{ 'asset.assetTag' = 'Etiqueta de inventario' } | Out-Null
+
+        @($calls) | Should -Be @('Etiqueta de inventario')
+    }
+
+    It 'falls back to the hardcoded default label for the free-text prompt when no FieldLabels override is supplied' {
+        $calls = [System.Collections.Generic.List[string]]::new()
+        $prompter = { param($Key) $calls.Add($Key); 'algún valor' }
+
+        Read-InventoryManualCapture -FieldKeys @('collection.observations') -Prompter $prompter | Out-Null
+
+        @($calls) | Should -Be @('Observaciones')
+    }
+}
+
+Describe 'Get-InventoryDefaultFieldLabel' {
+    It 'returns the known Spanish label for each of the 6 documented manual field keys' {
+        Get-InventoryDefaultFieldLabel -Key 'assignment.user.fullName' | Should -Be 'Nombre completo del usuario'
+        Get-InventoryDefaultFieldLabel -Key 'assignment.organizationUnitId' | Should -Be 'Dirección'
+        Get-InventoryDefaultFieldLabel -Key 'assignment.departmentUnitId' | Should -Be 'Departamento'
+        Get-InventoryDefaultFieldLabel -Key 'assignment.locationId' | Should -Be 'Ubicación'
+        Get-InventoryDefaultFieldLabel -Key 'asset.assetTag' | Should -Be 'Número patrimonial'
+        Get-InventoryDefaultFieldLabel -Key 'collection.observations' | Should -Be 'Observaciones'
+    }
+
+    It 'returns null for a key with no known default label' {
+        Get-InventoryDefaultFieldLabel -Key 'custom.someOrgSpecificField' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-InventoryFieldLabel' {
+    It 'prefers an organization-supplied label (custom-fields.json) over the hardcoded default' {
+        $fieldLabels = @{ 'assignment.user.fullName' = 'Nombre del colaborador' }
+
+        Get-InventoryFieldLabel -Key 'assignment.user.fullName' -FieldLabels $fieldLabels | Should -Be 'Nombre del colaborador'
+    }
+
+    It 'falls back to the hardcoded default label when FieldLabels has no entry for the key' {
+        Get-InventoryFieldLabel -Key 'asset.assetTag' -FieldLabels @{} | Should -Be 'Número patrimonial'
+        Get-InventoryFieldLabel -Key 'asset.assetTag' -FieldLabels $null | Should -Be 'Número patrimonial'
+    }
+
+    It 'falls back to the raw key as a last resort for a custom field with no configured label at all' {
+        Get-InventoryFieldLabel -Key 'custom.someOrgSpecificField' -FieldLabels @{} | Should -Be 'custom.someOrgSpecificField'
     }
 }
 
@@ -563,6 +622,121 @@ Describe 'Read-InventoryOrganizationUnitSelection' {
         $result.Id | Should -Be 'dept-hr'
         $result.Name | Should -Be 'Recursos Humanos'
         $state.Index | Should -Be 3
+    }
+
+    It 'shows the given Label as a header before the numbered menu' {
+        $units = @(
+            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+        )
+        Mock Write-Host {}
+        $prompter = { param($Prompt) '' }
+
+        Read-InventoryOrganizationUnitSelection -Units $units -Prompter $prompter -Label 'Dirección' | Out-Null
+
+        Should -Invoke Write-Host -ParameterFilter { $Object -match 'Dirección' }
+    }
+
+    It 'shows no field-name header line when Label is not supplied' {
+        $units = @(
+            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+        )
+        Mock Write-Host {}
+        $prompter = { param($Prompt) '' }
+
+        Read-InventoryOrganizationUnitSelection -Units $units -Prompter $prompter | Out-Null
+
+        Should -Not -Invoke Write-Host -ParameterFilter { $Object -match 'Dirección' }
+    }
+}
+
+Describe 'ConvertTo-InventoryOrganizationUnitMenuEntries' {
+    It 'formats each menu item as "N. <indent><Name>", numbered by 1-based position, matching the existing print format' {
+        $menu = @(
+            [PSCustomObject]@{ Id = 'a'; Name = 'Sede Centro'; Depth = 0 }
+            [PSCustomObject]@{ Id = 'b'; Name = 'Dirección Administrativa'; Depth = 1 }
+            [PSCustomObject]@{ Id = 'c'; Name = 'Recursos Humanos'; Depth = 2 }
+        )
+
+        $entries = ConvertTo-InventoryOrganizationUnitMenuEntries -Menu $menu
+
+        $entries.GetType().IsArray | Should -BeTrue
+        $entries.Count | Should -Be 3
+        $entries[0] | Should -Be (" 1. " + "Sede Centro")
+        $entries[1] | Should -Be (" 2. " + "  " + "Dirección Administrativa")
+        $entries[2] | Should -Be (" 3. " + "    " + "Recursos Humanos")
+    }
+
+    It 'returns an empty array without throwing when Menu is null or empty' {
+        $fromNull = ConvertTo-InventoryOrganizationUnitMenuEntries -Menu $null
+        $fromEmpty = ConvertTo-InventoryOrganizationUnitMenuEntries -Menu @()
+
+        $fromNull.GetType().IsArray | Should -BeTrue
+        $fromNull.Count | Should -Be 0
+        $fromEmpty.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-InventoryMenuColumnCount' {
+    It 'returns 2 when ConsoleWidth is null (could not be determined)' {
+        Get-InventoryMenuColumnCount -MaxEntryWidth 20 -ConsoleWidth $null | Should -Be 2
+    }
+
+    It 'returns 2 when ConsoleWidth is zero or negative' {
+        Get-InventoryMenuColumnCount -MaxEntryWidth 20 -ConsoleWidth 0 | Should -Be 2
+        Get-InventoryMenuColumnCount -MaxEntryWidth 20 -ConsoleWidth -10 | Should -Be 2
+    }
+
+    It 'returns 2 when exactly 2 columns fit the console width' {
+        # cell width = MaxEntryWidth + 4 = 14; 2 * 14 = 28 fits, 3 * 14 = 42 does not.
+        Get-InventoryMenuColumnCount -MaxEntryWidth 10 -ConsoleWidth 28 | Should -Be 2
+    }
+
+    It 'returns 3 when exactly 3 columns fit the console width' {
+        # cell width = MaxEntryWidth + 4 = 14; 3 * 14 = 42 fits exactly.
+        Get-InventoryMenuColumnCount -MaxEntryWidth 10 -ConsoleWidth 42 | Should -Be 3
+    }
+
+    It 'never returns more than 3 even when many more columns would fit' {
+        Get-InventoryMenuColumnCount -MaxEntryWidth 5 -ConsoleWidth 500 | Should -Be 3
+    }
+}
+
+Describe 'Format-InventoryMenuColumns' {
+    It 'lays out entries row-major (left to right, then next row), padding every cell except the last one in each row' {
+        $entries = @(' 1. Uno', ' 2. Dos', ' 3. Tres', ' 4. Cuatro')
+
+        $lines = Format-InventoryMenuColumns -Entries $entries -Columns 2
+
+        $lines.GetType().IsArray | Should -BeTrue
+        $lines.Count | Should -Be 2
+        $cellWidth = (' 4. Cuatro').Length + 4
+        $lines[0] | Should -Be (' 1. Uno'.PadRight($cellWidth) + ' 2. Dos')
+        $lines[1] | Should -Be (' 3. Tres'.PadRight($cellWidth) + ' 4. Cuatro')
+    }
+
+    It 'gives the last row a single, unpadded cell when the entry count does not divide evenly into columns' {
+        $entries = @(' 1. A', ' 2. B', ' 3. C', ' 4. D', ' 5. E')
+
+        $lines = Format-InventoryMenuColumns -Entries $entries -Columns 2
+
+        $lines.Count | Should -Be 3
+        $lines[2] | Should -Be ' 5. E'
+    }
+
+    It 'returns an empty array without throwing when Entries is null or empty' {
+        $fromNull = Format-InventoryMenuColumns -Entries $null -Columns 2
+        $fromEmpty = Format-InventoryMenuColumns -Entries @() -Columns 2
+
+        $fromNull.GetType().IsArray | Should -BeTrue
+        $fromNull.Count | Should -Be 0
+        $fromEmpty.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-InventoryConsoleWidth' {
+    It 'never throws and returns either $null or a positive integer' {
+        { $script:consoleWidthResult = Get-InventoryConsoleWidth } | Should -Not -Throw
+        ($null -eq $script:consoleWidthResult -or $script:consoleWidthResult -gt 0) | Should -BeTrue
     }
 }
 

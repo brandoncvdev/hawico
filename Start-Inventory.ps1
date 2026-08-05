@@ -86,6 +86,26 @@ try {
         -BasePath $resolvedOrganizationPackagesBasePath `
         -OrganizationId $collectionSession.OrganizationId
 
+    # "Labels legibles" task: the technician sees "Dirección" / "Número
+    # patrimonial" / etc. instead of the raw dotted field keys. Only the
+    # organization's own overrides go into $fieldLabels here — the hardcoded
+    # defaults (Get-InventoryDefaultFieldLabel) are resolved lazily by
+    # Get-InventoryFieldLabel wherever a label is actually needed, so they
+    # never need duplicating in this launcher.
+    $customFieldDefinitions = Get-InventoryCustomFieldDefinitions `
+        -BasePath $resolvedOrganizationPackagesBasePath `
+        -OrganizationId $collectionSession.OrganizationId
+
+    $fieldLabels = @{}
+    foreach ($fieldDefinition in @($customFieldDefinitions)) {
+        if ($null -eq $fieldDefinition) { continue }
+        $fieldKey = Get-SafeString ([string]$fieldDefinition.key)
+        $fieldLabel = Get-SafeString ([string]$fieldDefinition.label)
+        if ($null -ne $fieldKey -and $null -ne $fieldLabel) {
+            $fieldLabels[$fieldKey] = $fieldLabel
+        }
+    }
+
     # doc07-Catalog-System.md "Reutilización durante visita": El técnico
     # selecciona un contexto (Técnico/Dirección/Departamento). Los valores se
     # heredan hasta que se cambien, evitando capturar el mismo departamento
@@ -95,7 +115,8 @@ try {
         param(
             [AllowNull()][string]$CurrentTechnician,
             [AllowNull()][object[]]$OrganizationUnits = @(),
-            [AllowNull()][object[]]$DepartmentUnits = @()
+            [AllowNull()][object[]]$DepartmentUnits = @(),
+            [AllowNull()][hashtable]$FieldLabels = @{}
         )
 
         Write-Host ""
@@ -108,9 +129,12 @@ try {
         $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
         $hasDepartmentUnits = @($DepartmentUnits).Count -gt 0
 
+        $directionLabel = Get-InventoryFieldLabel -Key 'assignment.organizationUnitId' -FieldLabels $FieldLabels
+        $departmentLabel = Get-InventoryFieldLabel -Key 'assignment.departmentUnitId' -FieldLabels $FieldLabels
+
         $directionSelection = $null
         if ($hasOrganizationUnits) {
-            $directionSelection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits
+            $directionSelection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Label $directionLabel
             if ($null -ne $directionSelection) {
                 $presetValues['assignment.organizationUnitId'] = $directionSelection.Name
             }
@@ -121,7 +145,7 @@ try {
             # own, regardless of whether Dirección was picked above — same
             # priority Read-InventoryManualCapture itself gives
             # -DepartmentUnits over the cascade.
-            $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits
+            $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $DepartmentUnits -Label $departmentLabel
             if ($null -ne $departmentSelection) {
                 $presetValues['assignment.departmentUnitId'] = $departmentSelection.Name
             }
@@ -129,7 +153,7 @@ try {
         elseif ($null -ne $directionSelection) {
             $childUnits = Get-InventoryOrganizationUnitChildren -Units $OrganizationUnits -ParentId $directionSelection.Id
             if (@($childUnits).Count -gt 0) {
-                $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $childUnits
+                $departmentSelection = Read-InventoryOrganizationUnitSelection -Units $childUnits -Label $departmentLabel
                 if ($null -ne $departmentSelection) {
                     $presetValues['assignment.departmentUnitId'] = $departmentSelection.Name
                 }
@@ -154,7 +178,7 @@ try {
     }
 
     $visitContext = Read-InventoryVisitContext -CurrentTechnician $collectionSession.Technician `
-        -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits
+        -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits -FieldLabels $fieldLabels
     $visitTechnician = $visitContext.Technician
     $visitPresetValues = $visitContext.PresetValues
 
@@ -165,6 +189,7 @@ try {
         OrganizationUnits = $organizationUnits
         DepartmentUnits = $departmentUnits
         PresetManualFieldValues = $visitPresetValues
+        FieldLabels = $fieldLabels
     }
 
     function Wait-MenuInput {
@@ -296,7 +321,7 @@ try {
 
             "9" {
                 $visitContext = Read-InventoryVisitContext -CurrentTechnician $visitTechnician `
-                    -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits
+                    -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits -FieldLabels $fieldLabels
                 $visitTechnician = $visitContext.Technician
                 $visitPresetValues = $visitContext.PresetValues
                 $collectionArguments.Technician = $visitTechnician

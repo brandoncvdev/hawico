@@ -323,6 +323,33 @@ launcher: menu option **"9. Cambiar contexto de esta visita
 updates `$collectionArguments` in place, so the next collection (options 1/2)
 picks up the new values immediately.
 
+## Readable field labels
+
+Every manual-field prompt (free text or a catalog menu's header line) shows a
+human label instead of the raw dotted field key (`assignment.organizationUnitId`
+never appears on screen — `Dirección` does). `Get-InventoryDefaultFieldLabel`
+(`Modules/New-InventoryManualCapture.ps1`) hardcodes the 6 documented keys'
+Spanish labels; `Get-InventoryFieldLabel -Key -FieldLabels` resolves the final
+label with priority **organization's `custom-fields.json` label → hardcoded
+default → the raw key itself** (only reachable for an organization-specific
+field nobody labeled). `Start-Inventory.ps1` builds `$fieldLabels` from
+`Get-InventoryCustomFieldDefinitions` and forwards it as
+`$collectionArguments.FieldLabels`; `Read-InventoryManualCapture` and the
+visit-context catalog prompts both resolve through `Get-InventoryFieldLabel`.
+
+## Multi-column catalog menus
+
+`Read-InventoryOrganizationUnitSelection` prints its numbered menu in 2 or 3
+fixed-width columns (row-major, never more than 3) instead of one item per
+line — with a real catalog like `institucion-principal`'s 48 departments, a
+single column meant a lot of scrolling. Column count comes from
+`Get-InventoryMenuColumnCount`, based on the console width
+(`Get-InventoryConsoleWidth`, `$Host.UI.RawUI.WindowSize.Width`) when it can
+be determined; 2 fixed columns otherwise. The layout math itself
+(`ConvertTo-InventoryOrganizationUnitMenuEntries` for the per-item text,
+`Format-InventoryMenuColumns` for row assembly) is kept pure and unit-tested
+independently of the non-testable console-width detection.
+
 ## Configuration
 
 ```json
