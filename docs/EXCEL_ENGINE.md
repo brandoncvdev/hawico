@@ -63,13 +63,15 @@ column-by-column. All of the JSON paths that document lists
 `TechnicalData.OperatingSystem.Caption`) were verified against the actual
 collector modules (`Get-ComputerInfo.ps1`, `Get-ProcessorInfo.ps1`,
 `Get-MemoryInfo.ps1`, `Get-NetworkInfo.ps1`, `Get-StorageInfo.ps1`) before
-being coded — they match exactly, no corrections were needed.
+being coded — they match exactly, no corrections were needed. `REVISADO` is
+also always populated (`CollectionRecord.CollectedAt`, projected as a real
+`[datetime]`) — confirmed against the institution's real template that this
+column holds the capture date, not a review-status flag.
 
 Always `$null` today, with the reason:
 
 | Column | Why |
 | --- | --- |
-| `REVISADO` | Filled in later by administration review, not by the collector. |
 | `DEPARTAMENTO` | No manual field exists yet for the unit *below* `DIRECCION`; the hierarchical `OrganizationUnit` catalog is Phase 4 (agnostic configuration). |
 | `PC / LAPTOP` | No chassis detector (SMBIOS `ChassisTypes`) is implemented. |
 | `CANTIDAD REQUERIDA (MEMORIA)`, `MEMORIA REQUERIDA`, `VELOCIDAD`, `CANTIDAD REQUERIDA (DISCOS)`, `DISCOS SSD REQUERIDA`, `CANTIDAD REQUERIDA (CAMBIO)`, `CAMBIO DE EQUIPO` | All 7 depend on RAM/disk evaluation rules (`docs/09-Memory-Assessment.md`) that do not exist yet — `Assessments` is always `[]`. |

@@ -165,7 +165,14 @@ function ConvertTo-InventoryWorkbookRow {
     # so each is disambiguated with a short qualifier while staying
     # recognizable as the same visible header.
     return [PSCustomObject][ordered]@{
-        'REVISADO' = $null
+        # Confirmed against the institution's real nuevo_equipos_optimizado.xlsx:
+        # REVISADO holds the capture date/time, not a generic review-status
+        # flag the column name might otherwise suggest. CollectionRecord.CollectedAt
+        # is already always populated by New-InventoryCollectionRecord, so
+        # this needs no new capture step, only a projection of data already
+        # captured. Real DateTime value (not a raw ISO string) so Excel can
+        # sort/filter it as a date.
+        'REVISADO' = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $Record.CollectedAt
         'IP' = if ($null -ne $adapter) { $adapter.IPv4Address } else { $null }
         'MAC ADDRESS' = if ($null -ne $adapter) { $adapter.MACAddress } else { $null }
         'DIRECCION' = Get-InventoryManualFieldValueByKey -ManualFields $Record.ManualFields -Key 'assignment.organizationUnitId'
@@ -195,13 +202,6 @@ function ConvertTo-InventoryWorkbookRow {
         'CANTIDAD REQUERIDA (CAMBIO)' = $null
         'CAMBIO DE EQUIPO' = $null
         'S.O' = Get-SafeString $technicalData.OperatingSystem.Caption
-        # Appended after the institutional A-Z mapping instead of inserted
-        # among the lettered columns — never shifts any of the fixed column
-        # letters docs/INSTITUTIONAL_EXCEL_MAPPING.md or an existing
-        # spreadsheet formula might already depend on. CollectionRecord.CollectedAt
-        # is always populated by New-InventoryCollectionRecord, so this is a
-        # projection of data already captured, not a new capture step.
-        'FECHA DE RECOLECCION' = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $Record.CollectedAt
     }
 }
 
