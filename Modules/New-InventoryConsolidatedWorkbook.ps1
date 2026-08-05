@@ -57,6 +57,35 @@ function Get-InventoryDiskTypeLabel {
     return $busType
 }
 
+function Get-InventoryWorkbookCollectedAtDateTime {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Parses an in-memory value without changing system state.'
+    )]
+    param(
+        [AllowNull()][string]$CollectedAt
+    )
+
+    $normalized = Get-SafeString $CollectedAt
+    if ($null -eq $normalized) {
+        return $null
+    }
+
+    try {
+        $parsed = [datetimeoffset]::Parse($normalized, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    catch {
+        return $null
+    }
+
+    # .DateTime (not .LocalDateTime): keeps the wall-clock time exactly as
+    # captured on the collection PC, regardless of which timezone the
+    # workbook happens to be regenerated in later — administering from a
+    # different timezone must never silently shift the displayed hour.
+    return $parsed.DateTime
+}
+
 function ConvertTo-InventoryWorkbookRow {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
@@ -141,6 +170,13 @@ function ConvertTo-InventoryWorkbookRow {
         'CANTIDAD REQUERIDA (CAMBIO)' = $null
         'CAMBIO DE EQUIPO' = $null
         'S.O' = Get-SafeString $technicalData.OperatingSystem.Caption
+        # Appended after the institutional A-Z mapping instead of inserted
+        # among the lettered columns — never shifts any of the fixed column
+        # letters docs/INSTITUTIONAL_EXCEL_MAPPING.md or an existing
+        # spreadsheet formula might already depend on. CollectionRecord.CollectedAt
+        # is always populated by New-InventoryCollectionRecord, so this is a
+        # projection of data already captured, not a new capture step.
+        'FECHA DE RECOLECCION' = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $Record.CollectedAt
     }
 }
 

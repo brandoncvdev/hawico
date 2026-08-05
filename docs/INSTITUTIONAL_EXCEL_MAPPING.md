@@ -45,11 +45,24 @@ El Excel es una proyección de presentación. No es la fuente de verdad.
 | Y | CAMBIO DE EQUIPO | Assessment/ManualReview | Motivo o recomendación de reemplazo. | Pendiente de reglas versionadas |
 | Z | S.O | Windows | `TechnicalData.OperatingSystem.Caption`. | Disponible |
 
+## Columnas agregadas fuera de la plantilla institucional
+
+Estas columnas no forman parte de `nuevo_equipos_optimizado.xlsx` y se agregan
+**después** de Z, nunca insertadas entre las columnas A-Z, para no correr las
+letras de columna de las que ya dependen fórmulas o referencias existentes.
+
+| Columna | Encabezado | Origen | Mapeo o regla | Estado |
+| --- | --- | --- | --- | --- |
+| AA | FECHA DE RECOLECCION | CollectionRecord | `CollectionRecord.CollectedAt`, ya siempre poblado por `New-InventoryCollectionRecord` — no requiere una nueva captura. Se proyecta como un valor `[datetime]` real (no texto) para que Excel lo pueda ordenar/filtrar como fecha; usa la hora local tal como se registró en el equipo recolectado (`.DateTime`, no `.LocalDateTime`), para que administrar el consolidado desde otra zona horaria nunca corra la hora mostrada. | Disponible |
+
 ## Campos adicionales que no caben en la plantilla
 
 El sistema debe conservar fuera del Excel, como mínimo:
 
-- `CollectionId`, `SessionId`, fecha, versión del recolector y técnico.
+- `CollectionId`, `SessionId`, versión del recolector y técnico. (La fecha de
+  recolección sí se agregó al Excel — ver columna AA arriba — porque el
+  equipo administrativo la necesita visible ahí; el resto de estos campos
+  sigue disponible únicamente en el JSON/registro importable.)
 - Número de serie y UUID usados para deduplicación.
 - Todas las interfaces de red, direcciones IP y MAC.
 - Todos los procesadores, módulos de memoria y discos físicos.

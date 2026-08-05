@@ -130,6 +130,17 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         $row.'TIPO DISCO' | Should -Be 'NVMe/HDD'
         $row.'DISCO (GB)' | Should -Be 1408.45
         $row.'S.O' | Should -Be 'Microsoft Windows 10 Pro'
+        # Real DateTime value (not a raw ISO string), so Excel can sort/filter
+        # it as a date instead of plain text — CollectionRecord.CollectedAt
+        # ('2026-08-03T12:30:00-06:00' in this fixture) is already always
+        # populated by New-InventoryCollectionRecord, so this column never
+        # needs a new capture step, only a projection of data we already have.
+        # .DateTime (not .LocalDateTime): keeps the wall-clock time exactly as
+        # recorded at the collection PC, regardless of which timezone the
+        # workbook happens to be generated in later — administering from a
+        # different timezone must never silently shift the displayed hour.
+        $row.'FECHA DE RECOLECCION' | Should -BeOfType [datetime]
+        $row.'FECHA DE RECOLECCION' | Should -Be ([datetimeoffset]'2026-08-03T12:30:00-06:00').DateTime
     }
 
     It 'returns a PSCustomObject with columns in the documented A-to-Z order' {
@@ -144,8 +155,23 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
             'TIPO RAM', 'TIPO DISCO', 'DISCO (GB)',
             'CANTIDAD REQUERIDA (MEMORIA)', 'MEMORIA REQUERIDA', 'VELOCIDAD',
             'CANTIDAD REQUERIDA (DISCOS)', 'DISCOS SSD REQUERIDA',
-            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O'
+            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O',
+            # Appended after the institutional A-Z mapping (docs/INSTITUTIONAL_EXCEL_MAPPING.md)
+            # instead of inserted in the middle — never shifts any of the
+            # fixed A-Z column letters an existing formula/reference might
+            # depend on.
+            'FECHA DE RECOLECCION'
         )
+    }
+
+    It 'leaves FECHA DE RECOLECCION null instead of throwing when CollectedAt is missing or unparsable' {
+        $record = New-FixtureRecord
+        $record.CollectedAt = $null
+        (ConvertTo-InventoryWorkbookRow -Record $record).'FECHA DE RECOLECCION' | Should -BeNullOrEmpty
+
+        $record2 = New-FixtureRecord
+        $record2.CollectedAt = 'no-es-una-fecha'
+        (ConvertTo-InventoryWorkbookRow -Record $record2).'FECHA DE RECOLECCION' | Should -BeNullOrEmpty
     }
 
     It 'leaves DEPARTAMENTO null when no assignment.departmentUnitId manual field was captured' {
