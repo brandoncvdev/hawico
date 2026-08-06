@@ -92,26 +92,121 @@ function ConvertFrom-SmartctlJson {
     return $result
 }
 
+function Invoke-SmartctlCommand {
+    param(
+        [Parameter(Mandatory)][string]$SmartctlPath,
+        [Parameter(Mandatory)][int]$DiskIndex,
+        [AllowNull()][string]$DeviceTypeFlag,
+        [int]$TimeoutMs = 15000
+    )
+
+    $result = [ordered]@{
+        Success = $false
+        StdOut = $null
+        ExitCode = $null
+        ErrorCode = $null
+        ErrorMessage = $null
+    }
+
+    $devicePath = "\\.\PhysicalDrive$DiskIndex"
+    $argumentParts = @('-a', '-j')
+    if (-not [string]::IsNullOrWhiteSpace($DeviceTypeFlag) -and $DeviceTypeFlag -ne 'auto') {
+        $argumentParts += @('-d', $DeviceTypeFlag)
+    }
+    $argumentParts += $devicePath
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $SmartctlPath
+    $psi.Arguments = (($argumentParts | ForEach-Object { if ($_ -match '\s') { '"{0}"' -f $_ } else { $_ } }) -join ' ')
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $psi
+
+    try {
+        [void]$process.Start()
+    }
+    catch {
+        $result.ErrorCode = 'SMARTCTL-PROCESS-ERROR'
+        $result.ErrorMessage = $_.Exception.Message
+        return $result
+    }
+
+    try {
+        # Read stdout asynchronously before WaitForExit — smartctl's JSON
+        # payload can exceed the OS pipe buffer, and reading only after exit
+        # would deadlock a process still blocked writing to a full pipe.
+        $stdOutTask = $process.StandardOutput.ReadToEndAsync()
+        $exited = $process.WaitForExit($TimeoutMs)
+
+        if (-not $exited) {
+            try { $process.Kill() } catch { }
+            $result.ErrorCode = 'SMARTCTL-TIMEOUT'
+            $result.ErrorMessage = "smartctl no respondió en $TimeoutMs ms para el disco $DiskIndex."
+            return $result
+        }
+
+        $result.ExitCode = $process.ExitCode
+        $result.StdOut = $stdOutTask.GetAwaiter().GetResult()
+        $result.Success = $true
+        return $result
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+function Get-DiskSmartData {
+    param(
+        [Parameter(Mandatory)][string]$SmartctlPath,
+        [Parameter(Mandatory)][int]$DiskIndex,
+        [AllowNull()][string]$BusType
+    )
+
+    $primaryFlag = switch ([string]$BusType) {
+        'NVMe' { 'nvme' }
+        'USB' { 'sat' }
+        default { $null }
+    }
+
+    $invocation = Invoke-SmartctlCommand -SmartctlPath $SmartctlPath -DiskIndex $DiskIndex -DeviceTypeFlag $primaryFlag
+
+    if (-not $invocation.Success -and [string]$BusType -eq 'USB') {
+        # USB bridges frequently misreport under the vendor-agnostic `sat`
+        # flag; retry once with auto-detect instead of giving up on the disk.
+        $invocation = Invoke-SmartctlCommand -SmartctlPath $SmartctlPath -DiskIndex $DiskIndex -DeviceTypeFlag $null
+    }
+
+    if (-not $invocation.Success) {
+        $result = ConvertFrom-SmartctlJson -SmartctlOutput $null
+        $result.ErrorCode = $invocation.ErrorCode
+        $result.ErrorMessage = $invocation.ErrorMessage
+        return $result
+    }
+
+    try {
+        $parsed = $invocation.StdOut | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return ConvertFrom-SmartctlJson -SmartctlOutput $null
+    }
+
+    return ConvertFrom-SmartctlJson -SmartctlOutput $parsed
+}
+
 function Get-StorageInventory {
+    param(
+        # Defaults to the bundled Tools\smartctl.exe next to this repo's
+        # Modules folder, so both existing call sites (Collector_Hardware_
+        # Inventory.ps1, Collector_Windows_HealthCheck.ps1) need zero changes.
+        [string]$SmartctlPath = (Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) 'Tools') 'smartctl.exe')
+    )
+
     $physicalRaw = Get-CimDataSafe -ClassName "Win32_DiskDrive"
     $logicalRaw = Get-CimDataSafe -ClassName "Win32_LogicalDisk" -Filter "DriveType = 3"
-
-    $physical = @(
-        $physicalRaw | ForEach-Object {
-            [ordered]@{
-                Index         = $_.Index
-                Model         = Get-SafeString $_.Model
-                Manufacturer  = Get-SafeString $_.Manufacturer
-                SerialNumber  = Get-SafeString $_.SerialNumber
-                InterfaceType = Get-SafeString $_.InterfaceType
-                MediaType     = Get-SafeString $_.MediaType
-                Firmware      = Get-SafeString $_.FirmwareRevision
-                SizeGB        = Convert-BytesToGB $_.Size
-                Partitions    = $_.Partitions
-                Status        = Get-SafeString $_.Status
-            }
-        }
-    )
 
     $logical = @(
         $logicalRaw | ForEach-Object {
@@ -151,6 +246,64 @@ function Get-StorageInventory {
             Write-Warning ("No se pudo consultar Get-PhysicalDisk: {0}" -f $_.Exception.Message)
         }
     }
+
+    # Single explicit Test-Path pre-check (not per-disk): avoids N failed
+    # process spawns when the binary is simply absent, matching the
+    # Get-PhysicalDisk degradation convention already used above.
+    $smartctlAvailable = (-not [string]::IsNullOrWhiteSpace($SmartctlPath)) -and (Test-Path -LiteralPath $SmartctlPath -PathType Leaf)
+
+    $physical = @(
+        $physicalRaw | ForEach-Object {
+            $diskIndex = $_.Index
+            $serialNumber = Get-SafeString $_.SerialNumber
+            $model = Get-SafeString $_.Model
+            $manufacturer = Get-SafeString $_.Manufacturer
+            $interfaceType = Get-SafeString $_.InterfaceType
+            $mediaType = Get-SafeString $_.MediaType
+            $firmware = Get-SafeString $_.FirmwareRevision
+            $sizeGB = Convert-BytesToGB $_.Size
+            $partitions = $_.Partitions
+            $status = Get-SafeString $_.Status
+
+            $busType = $null
+            if ($null -ne $serialNumber) {
+                $matchedDetail = @($detailed | Where-Object { $_.SerialNumber -eq $serialNumber })
+                if ($matchedDetail.Count -gt 0) { $busType = $matchedDetail[0].BusType }
+            }
+
+            $smart = $null
+            if ($smartctlAvailable) {
+                try {
+                    $smart = Get-DiskSmartData -SmartctlPath $SmartctlPath -DiskIndex $diskIndex -BusType $busType
+                }
+                catch {
+                    Write-Warning ("No se pudo obtener datos SMART del disco {0}: {1}" -f $diskIndex, $_.Exception.Message)
+                    $smart = ConvertFrom-SmartctlJson -SmartctlOutput $null
+                    $smart.ErrorCode = 'SMARTCTL-PROCESS-ERROR'
+                    $smart.ErrorMessage = $_.Exception.Message
+                }
+            }
+            else {
+                $smart = ConvertFrom-SmartctlJson -SmartctlOutput $null
+                $smart.ErrorCode = 'SMARTCTL-NOT-FOUND'
+                $smart.ErrorMessage = 'smartctl.exe no está disponible en la ruta configurada.'
+            }
+
+            [ordered]@{
+                Index         = $diskIndex
+                Model         = $model
+                Manufacturer  = $manufacturer
+                SerialNumber  = $serialNumber
+                InterfaceType = $interfaceType
+                MediaType     = $mediaType
+                Firmware      = $firmware
+                SizeGB        = $sizeGB
+                Partitions    = $partitions
+                Status        = $status
+                Smart         = $smart
+            }
+        }
+    )
 
     return [ordered]@{
         Physical = $physical

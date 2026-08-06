@@ -1,4 +1,10 @@
-BeforeAll { . "$PSScriptRoot/../Modules/Get-StorageInfo.ps1" }
+BeforeAll {
+ . "$PSScriptRoot/../Modules/Common.ps1"
+ . "$PSScriptRoot/../Modules/Get-StorageInfo.ps1"
+ if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+  function Get-CimInstance { param($Namespace, $ClassName, $Filter) }
+ }
+}
 Describe 'ConvertFrom-SmartctlJson' {
  It 'parses a successful ATA disk report' {
   $json = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true},"temperature":{"current":34},"power_on_time":{"hours":12000},"power_cycle_count":450,"ata_smart_attributes":{"table":[{"id":5,"name":"Reallocated_Sector_Ct","raw":{"value":0}},{"id":197,"name":"Current_Pending_Sector","raw":{"value":0}},{"id":198,"name":"Offline_Uncorrectable","raw":{"value":0}}]}}' | ConvertFrom-Json
@@ -99,5 +105,141 @@ Describe 'ConvertFrom-SmartctlJson' {
   $r.ReallocatedSectorCount | Should -Be 3
   $r.PendingSectorCount | Should -BeNullOrEmpty
   $r.UncorrectableSectorCount | Should -BeNullOrEmpty
+ }
+}
+
+Describe 'Get-DiskSmartData' {
+ It 'uses the nvme device-type flag for an NVMe bus' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"NVMe"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'NVMe' | Out-Null
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'nvme' }
+ }
+ It 'omits the device-type flag (auto-detect) for a SATA bus' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA' | Out-Null
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+ }
+ It 'omits the device-type flag (auto-detect) when the bus is unknown' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType $null | Out-Null
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+ }
+ It 'tries the sat device-type flag first for a USB bus, and retries once with auto-detect when it fails' {
+  $script:usbCallCount = 0
+  Mock Invoke-SmartctlCommand {
+   $script:usbCallCount++
+   if ($script:usbCallCount -eq 1) {
+    return [ordered]@{ Success = $false; StdOut = $null; ExitCode = 1; ErrorCode = 'SMARTCTL-PROCESS-ERROR'; ErrorMessage = 'unsupported device' }
+   }
+   return [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  $result = Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'USB'
+  Should -Invoke Invoke-SmartctlCommand -Times 2
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'sat' }
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+  $result.Supported | Should -BeTrue
+ }
+ It 'does not retry a non-USB bus after a failed invocation' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $false; StdOut = $null; ExitCode = 1; ErrorCode = 'SMARTCTL-PROCESS-ERROR'; ErrorMessage = 'error' }
+  }
+  Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA' | Out-Null
+  Should -Invoke Invoke-SmartctlCommand -Times 1
+ }
+ It 'propagates a SMARTCTL-TIMEOUT error code from the invocation without throwing, using the 15s default timeout' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $false; StdOut = $null; ExitCode = $null; ErrorCode = 'SMARTCTL-TIMEOUT'; ErrorMessage = 'smartctl no respondió en 15000 ms para el disco 0.' }
+  }
+  { Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA' } | Should -Not -Throw
+  $result = Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA'
+  $result.Supported | Should -BeFalse
+  $result.Source | Should -Be 'Unavailable'
+  $result.ErrorCode | Should -Be 'SMARTCTL-TIMEOUT'
+ }
+ It 'degrades gracefully when the invocation succeeds but the stdout is not valid JSON' {
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $true; StdOut = 'not json'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  $result = Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA'
+  $result.Supported | Should -BeFalse
+  $result.Source | Should -Be 'Unavailable'
+  $result.ErrorCode | Should -Be 'SMARTCTL-PARSE-ERROR'
+ }
+}
+
+Describe 'Get-StorageInventory (SMART capture)' {
+ It 'marks every disk Unavailable and never spawns a process when smartctl.exe is absent' {
+  Mock Get-CimInstance {
+   param($Namespace, $ClassName, $Filter)
+   if ($ClassName -eq 'Win32_DiskDrive') {
+    @([pscustomobject]@{ Index = 0; Model = 'Disk A'; Manufacturer = 'Acme'; SerialNumber = 'SN-A'; InterfaceType = 'SCSI'; MediaType = 'Fixed hard disk'; FirmwareRevision = '1.0'; Size = 500GB; Partitions = 1; Status = 'OK' })
+   } else { @() }
+  }
+  Mock Invoke-SmartctlCommand { throw 'should never be called' }
+  Mock Get-DiskSmartData { throw 'should never be called' }
+
+  $missingPath = Join-Path $TestDrive 'does-not-exist-smartctl.exe'
+  $result = Get-StorageInventory -SmartctlPath $missingPath
+
+  $result.Physical.Count | Should -Be 1
+  $result.Physical[0].Smart.Supported | Should -BeFalse
+  $result.Physical[0].Smart.Source | Should -Be 'Unavailable'
+  $result.Physical[0].Smart.ErrorCode | Should -Be 'SMARTCTL-NOT-FOUND'
+  Should -Invoke Get-DiskSmartData -Times 0
+  Should -Invoke Invoke-SmartctlCommand -Times 0
+ }
+
+ It 'kills a hanging smartctl invocation via its 15s timeout and marks the disk SMARTCTL-TIMEOUT' {
+  Mock Get-CimInstance {
+   param($Namespace, $ClassName, $Filter)
+   if ($ClassName -eq 'Win32_DiskDrive') {
+    @([pscustomobject]@{ Index = 0; Model = 'Disk A'; Manufacturer = 'Acme'; SerialNumber = 'SN-A'; InterfaceType = 'SCSI'; MediaType = 'Fixed hard disk'; FirmwareRevision = '1.0'; Size = 500GB; Partitions = 1; Status = 'OK' })
+   } else { @() }
+  }
+  $smartctlPath = Join-Path $TestDrive 'smartctl.exe'
+  New-Item -Path $smartctlPath -ItemType File -Force | Out-Null
+
+  Mock Invoke-SmartctlCommand {
+   [ordered]@{ Success = $false; StdOut = $null; ExitCode = $null; ErrorCode = 'SMARTCTL-TIMEOUT'; ErrorMessage = 'smartctl no respondió en 15000 ms para el disco 0.' }
+  }
+
+  $result = Get-StorageInventory -SmartctlPath $smartctlPath
+
+  $result.Physical[0].Smart.Supported | Should -BeFalse
+  $result.Physical[0].Smart.ErrorCode | Should -Be 'SMARTCTL-TIMEOUT'
+  Should -Invoke Invoke-SmartctlCommand -Times 1
+ }
+
+ It 'keeps every disk in the result and isolates a per-disk SMART failure without dropping other disks' {
+  Mock Get-CimInstance {
+   param($Namespace, $ClassName, $Filter)
+   if ($ClassName -eq 'Win32_DiskDrive') {
+    @(
+     [pscustomobject]@{ Index = 0; Model = 'Disk0'; Manufacturer = 'Acme'; SerialNumber = 'SN-0'; InterfaceType = 'SCSI'; MediaType = 'Fixed hard disk'; FirmwareRevision = '1.0'; Size = 500GB; Partitions = 1; Status = 'OK' }
+     [pscustomobject]@{ Index = 1; Model = 'Disk1'; Manufacturer = 'Acme'; SerialNumber = 'SN-1'; InterfaceType = 'SCSI'; MediaType = 'Fixed hard disk'; FirmwareRevision = '1.0'; Size = 500GB; Partitions = 1; Status = 'OK' }
+    )
+   } else { @() }
+  }
+  $smartctlPath = Join-Path $TestDrive 'smartctl.exe'
+  New-Item -Path $smartctlPath -ItemType File -Force | Out-Null
+
+  Mock Get-DiskSmartData {
+   param($SmartctlPath, $DiskIndex, $BusType)
+   if ($DiskIndex -eq 1) { throw 'smartctl process error on disk 1' }
+   return [ordered]@{ Supported = $true; Source = 'ATA'; OverallHealth = 'PASSED'; ErrorCode = $null; ErrorMessage = $null }
+  }
+
+  $result = Get-StorageInventory -SmartctlPath $smartctlPath
+
+  $result.Physical.Count | Should -Be 2
+  $result.Physical[0].Smart.Supported | Should -BeTrue
+  $result.Physical[1].Smart.Supported | Should -BeFalse
+  $result.Physical[1].Smart.ErrorCode | Should -Be 'SMARTCTL-PROCESS-ERROR'
  }
 }

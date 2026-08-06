@@ -37,11 +37,11 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 2: SMART Invocation & Capture (PR2) — domain: storage-inventory
 
-- [ ] 2.1 RED (threat: binary missing) — `Get-StorageInventory` with absent `smartctl.exe`: all disks `Unavailable`, no spawn, no exception.
-- [ ] 2.2 RED (threat: process hangs) — stub `Invoke-SmartctlCommand` with no exit: 15s timeout, disk `ErrorCode=SMARTCTL-TIMEOUT`.
-- [ ] 2.3 RED — per-disk failure: disk0 succeeds, disk1 errors; both remain, disk0 populated, disk1 null (Graceful Degradation).
-- [ ] 2.4 RED — device-type flag: `nvme` for BusType=NVMe, `sat` for USB (retry once on failure), omitted otherwise.
-- [ ] 2.5 GREEN+REFACTOR: implement `Invoke-SmartctlCommand`, `Get-DiskSmartData`, `-SmartctlPath` param; wire into `$physical` loop with per-disk try/catch and one `Test-Path` pre-check.
+- [x] 2.1 RED (threat: binary missing) — `Get-StorageInventory` with absent `smartctl.exe`: all disks `Unavailable`, no spawn, no exception.
+- [x] 2.2 RED (threat: process hangs) — stub `Invoke-SmartctlCommand` with no exit: 15s timeout, disk `ErrorCode=SMARTCTL-TIMEOUT`.
+- [x] 2.3 RED — per-disk failure: disk0 succeeds, disk1 errors; both remain, disk0 populated, disk1 null (Graceful Degradation).
+- [x] 2.4 RED — device-type flag: `nvme` for BusType=NVMe, `sat` for USB (retry once on failure), omitted otherwise.
+- [x] 2.5 GREEN+REFACTOR: implement `Invoke-SmartctlCommand`, `Get-DiskSmartData`, `-SmartctlPath` param; wire into `$physical` loop with per-disk try/catch and one `Test-Path` pre-check.
 
 ## Phase 3: Aggregation (PR3) — domain: storage-inventory
 
