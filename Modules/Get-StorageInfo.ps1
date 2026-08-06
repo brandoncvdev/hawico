@@ -92,6 +92,156 @@ function ConvertFrom-SmartctlJson {
     return $result
 }
 
+# Standard ATA SMART attribute IDs this parser understands, mapped to the
+# same field ConvertFrom-SmartctlJson already populates from smartctl's JSON
+# output — so both sources (WMI FailurePredictData and smartctl) produce
+# identical downstream data regardless of which one captured it.
+$script:AtaSmartAttributeFieldMap = @{
+    5   = 'ReallocatedSectorCount'
+    9   = 'PowerOnHours'
+    12  = 'PowerCycleCount'
+    194 = 'TemperatureCelsius'
+    197 = 'PendingSectorCount'
+    198 = 'UncorrectableSectorCount'
+}
+
+function ConvertFrom-AtaSmartRawValue {
+    param([Parameter(Mandatory)][byte[]]$RawBytes, [Parameter(Mandatory)][int]$AttributeId)
+
+    if ($AttributeId -eq 194) {
+        # Temperature packs the current reading in the first raw byte only;
+        # the remaining bytes commonly carry vendor-specific min/max history
+        # whose layout varies too much across drives to decode generically.
+        return [int]$RawBytes[0]
+    }
+
+    $value = [int64]0
+    for ($i = 0; $i -lt $RawBytes.Length; $i++) {
+        $value = $value -bor ([int64]$RawBytes[$i] -shl (8 * $i))
+    }
+    return $value
+}
+
+function ConvertFrom-AtaSmartAttributeTable {
+    param([Parameter(Mandatory)][AllowNull()][byte[]]$RawBytes)
+
+    # Same output shape ConvertFrom-SmartctlJson already returns, so
+    # downstream code (Get-StorageSmartSummary, STO-006..012) needs zero
+    # changes regardless of which source populated .Smart.
+    $result = [ordered]@{
+        Supported = $false
+        Source = 'Unavailable'
+        OverallHealth = $null
+        TemperatureCelsius = $null
+        PowerOnHours = $null
+        PowerCycleCount = $null
+        ReallocatedSectorCount = $null
+        PendingSectorCount = $null
+        UncorrectableSectorCount = $null
+        AvailableSparePercent = $null
+        PercentageUsed = $null
+        MediaErrorCount = $null
+        CriticalWarningFlags = $null
+        ErrorCode = $null
+        ErrorMessage = $null
+    }
+
+    if ($null -eq $RawBytes -or $RawBytes.Length -lt 512) {
+        $result.ErrorCode = 'WMI-SMART-MALFORMED'
+        $result.ErrorMessage = 'El bloque de datos SMART de WMI es demasiado corto o está vacío.'
+        return $result
+    }
+
+    $result.Supported = $true
+    $result.Source = 'ATA'
+
+    # Standard layout: 2-byte header, then up to 30 x 12-byte attribute
+    # records — Id(1)/FlagsLo(1)/FlagsHi(1)/Current(1)/Worst(1)/Raw(6)/
+    # Reserved(1). An Id of 0 marks an unused slot and is skipped; an Id
+    # this map doesn't recognize is also skipped, not treated as an error.
+    for ($slot = 0; $slot -lt 30; $slot++) {
+        $offset = 2 + ($slot * 12)
+        $id = [int]$RawBytes[$offset]
+        if ($id -eq 0) { continue }
+        if (-not $script:AtaSmartAttributeFieldMap.ContainsKey($id)) { continue }
+
+        $rawSlice = [byte[]]$RawBytes[($offset + 5)..($offset + 10)]
+        $value = ConvertFrom-AtaSmartRawValue -RawBytes $rawSlice -AttributeId $id
+        $result[$script:AtaSmartAttributeFieldMap[$id]] = $value
+    }
+
+    return $result
+}
+
+function Test-WmiInstanceNameMatchesPnpDeviceId {
+    param([AllowNull()][string]$InstanceName, [AllowNull()][string]$PnpDeviceId)
+
+    if ([string]::IsNullOrWhiteSpace($InstanceName) -or [string]::IsNullOrWhiteSpace($PnpDeviceId)) {
+        return $false
+    }
+
+    # InstanceName carries a trailing "_N" WMI instance suffix the
+    # PnpDeviceId does not (e.g. "...\4&3714eef5&0&000000_0" vs
+    # "...\4&3714EEF5&0&000000") — comparing PnpDeviceId as a
+    # case-insensitive prefix of InstanceName handles both the casing
+    # difference and the suffix without needing to parse it off first.
+    return $InstanceName.StartsWith($PnpDeviceId, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-DiskSmartDataFromWmi {
+    param([AllowNull()][string]$PnpDeviceId)
+
+    $notFound = ConvertFrom-AtaSmartAttributeTable -RawBytes $null
+    $notFound.ErrorCode = 'WMI-SMART-NOT-FOUND'
+    $notFound.ErrorMessage = 'No se encontró un InstanceName de WMI que corresponda a este disco.'
+
+    if ([string]::IsNullOrWhiteSpace($PnpDeviceId)) {
+        return $notFound
+    }
+
+    try {
+        # Get-CimDataSafe already returns a properly array-preserved result
+        # via its own leading-comma guard — wrapping it again in @() here
+        # would nest it into a single-element array-of-array and break
+        # per-instance property access below. Use its return value as-is,
+        # matching every other Get-CimDataSafe call site in this file.
+        $predictData = Get-CimDataSafe -ClassName 'MSStorageDriver_FailurePredictData' -Namespace 'root/wmi'
+        $match = $predictData | Where-Object {
+            Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName (Get-SafeString $_.InstanceName) -PnpDeviceId $PnpDeviceId
+        } | Select-Object -First 1
+
+        if ($null -eq $match) {
+            return $notFound
+        }
+
+        if ($match.PSObject.Properties.Name -contains 'Active' -and $match.Active -eq $false) {
+            $inactive = ConvertFrom-AtaSmartAttributeTable -RawBytes $null
+            $inactive.ErrorCode = 'WMI-SMART-INACTIVE'
+            $inactive.ErrorMessage = 'El proveedor WMI de predicción de fallas indica que el monitoreo SMART no está activo para este disco.'
+            return $inactive
+        }
+
+        $result = ConvertFrom-AtaSmartAttributeTable -RawBytes ([byte[]]$match.VendorSpecific)
+
+        $statusData = Get-CimDataSafe -ClassName 'MSStorageDriver_FailurePredictStatus' -Namespace 'root/wmi'
+        $statusMatch = $statusData | Where-Object {
+            Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName (Get-SafeString $_.InstanceName) -PnpDeviceId $PnpDeviceId
+        } | Select-Object -First 1
+
+        if ($null -ne $statusMatch -and $statusMatch.PSObject.Properties.Name -contains 'PredictFailure') {
+            $result.OverallHealth = if ($statusMatch.PredictFailure) { 'FAILED' } else { 'PASSED' }
+        }
+
+        return $result
+    }
+    catch {
+        $unavailable = ConvertFrom-AtaSmartAttributeTable -RawBytes $null
+        $unavailable.ErrorCode = 'WMI-SMART-UNAVAILABLE'
+        $unavailable.ErrorMessage = $_.Exception.Message
+        return $unavailable
+    }
+}
+
 function Invoke-SmartctlCommand {
     param(
         [Parameter(Mandatory)][string]$SmartctlPath,
@@ -183,10 +333,35 @@ function Get-DiskSmartData {
     param(
         [Parameter(Mandatory)][string]$SmartctlPath,
         [Parameter(Mandatory)][int]$DiskIndex,
-        [AllowNull()][string]$BusType
+        [AllowNull()][string]$BusType,
+        [AllowNull()][string]$PnpDeviceId,
+        [bool]$SmartctlAvailable = $true
     )
 
     $isNvme = [string]$BusType -eq 'NVMe'
+
+    if (-not $isNvme) {
+        # Priority flip (Real-World Amendment, see proposal.md): the legacy
+        # root\wmi MSStorageDriver_FailurePredictData interface ships with
+        # Windows and needs no external binary — it returned real SMART data
+        # on OEM hardware where smartctl could not open the disk through ANY
+        # -d device type at all. It is tried first for every non-NVMe bus;
+        # smartctl (PR2/PR8's sat-then-auto ladder, unchanged below) is only
+        # a secondary fallback when WMI has nothing for this disk.
+        $wmiResult = Get-DiskSmartDataFromWmi -PnpDeviceId $PnpDeviceId
+        if ($wmiResult.Supported -or -not $SmartctlAvailable) {
+            return $wmiResult
+        }
+    }
+    elseif (-not $SmartctlAvailable) {
+        # NVMe path is unaffected by the WMI amendment (FailurePredictData is
+        # ATA-SMART-specific) and remains fully dependent on smartctl.
+        $unavailable = ConvertFrom-SmartctlJson -SmartctlOutput $null
+        $unavailable.ErrorCode = 'SMARTCTL-NOT-FOUND'
+        $unavailable.ErrorMessage = 'smartctl.exe no está disponible en la ruta configurada.'
+        return $unavailable
+    }
+
     $primaryFlag = if ($isNvme) { 'nvme' } else { 'sat' }
 
     $invocation = Invoke-SmartctlCommand -SmartctlPath $SmartctlPath -DiskIndex $DiskIndex -DeviceTypeFlag $primaryFlag
@@ -284,6 +459,7 @@ function Get-StorageInventory {
             $sizeGB = Convert-BytesToGB $_.Size
             $partitions = $_.Partitions
             $status = Get-SafeString $_.Status
+            $pnpDeviceId = Get-SafeString $_.PNPDeviceID
 
             $busType = $null
             if ($null -ne $serialNumber) {
@@ -291,22 +467,19 @@ function Get-StorageInventory {
                 if ($matchedDetail.Count -gt 0) { $busType = $matchedDetail[0].BusType }
             }
 
+            # Always attempted (not gated on $smartctlAvailable): the WMI
+            # FailurePredictData source Get-DiskSmartData now tries first for
+            # non-NVMe disks needs no external binary at all. Get-DiskSmartData
+            # itself decides whether/when the smartctl ladder is relevant.
             $smart = $null
-            if ($smartctlAvailable) {
-                try {
-                    $smart = Get-DiskSmartData -SmartctlPath $SmartctlPath -DiskIndex $diskIndex -BusType $busType
-                }
-                catch {
-                    Write-Warning ("No se pudo obtener datos SMART del disco {0}: {1}" -f $diskIndex, $_.Exception.Message)
-                    $smart = ConvertFrom-SmartctlJson -SmartctlOutput $null
-                    $smart.ErrorCode = 'SMARTCTL-PROCESS-ERROR'
-                    $smart.ErrorMessage = $_.Exception.Message
-                }
+            try {
+                $smart = Get-DiskSmartData -SmartctlPath $SmartctlPath -DiskIndex $diskIndex -BusType $busType -PnpDeviceId $pnpDeviceId -SmartctlAvailable:$smartctlAvailable
             }
-            else {
+            catch {
+                Write-Warning ("No se pudo obtener datos SMART del disco {0}: {1}" -f $diskIndex, $_.Exception.Message)
                 $smart = ConvertFrom-SmartctlJson -SmartctlOutput $null
-                $smart.ErrorCode = 'SMARTCTL-NOT-FOUND'
-                $smart.ErrorMessage = 'smartctl.exe no está disponible en la ruta configurada.'
+                $smart.ErrorCode = 'SMARTCTL-PROCESS-ERROR'
+                $smart.ErrorMessage = $_.Exception.Message
             }
 
             [ordered]@{
@@ -320,6 +493,7 @@ function Get-StorageInventory {
                 SizeGB        = $sizeGB
                 Partitions    = $partitions
                 Status        = $status
+                PNPDeviceID   = $pnpDeviceId
                 Smart         = $smart
             }
         }

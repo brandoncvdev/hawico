@@ -48,12 +48,12 @@ Exact numeric defaults are a `sdd-spec`/`sdd-design`-level decision (informed by
 
 | Area | Impact | Description |
 |------|--------|--------------|
-| `Modules/Get-StorageInfo.ps1` | Modified | Add smartctl invocation + SMART fields per physical disk |
+| `Modules/Get-StorageInfo.ps1` | Modified | Add `PNPDeviceID` capture, WMI `FailurePredictData` parsing/query (primary, ATA/SATA), smartctl invocation (secondary fallback for ATA/SATA, sole source for NVMe) + SMART fields per physical disk |
 | `Modules/Get-HealthFindings.ps1` | Modified | New STO-* SMART rules |
 | `Collector_Storage_Diagnostic.ps1` | New | Storage-only diagnostic collector (new file) |
 | `Start-Inventory.ps1` | Modified | New menu option 10 |
-| `Tools/smartctl.exe` | New | Bundled portable binary |
-| `docs/JSON_SCHEMA.md` | Modified | Document new fields/artifact |
+| `Tools/smartctl.exe` | New (optional) | Bundled portable binary — optional/secondary source for ATA/SATA, still required for NVMe |
+| `docs/JSON_SCHEMA.md` | Modified | Document new fields/artifact, including the WMI-primary/smartctl-secondary source order |
 
 ## Risks
 
@@ -69,7 +69,13 @@ Revert the module/collector/menu commits; `Tools\smartctl.exe` removal alone rev
 
 ## Dependencies
 
-- `smartctl.exe` portable Windows build (smartmontools), bundled under `Tools\`.
+- **None hard-required for ATA/SATA disks**: the primary SMART source is the
+  legacy WMI `root\wmi` `MSStorageDriver_FailurePredictData`/
+  `FailurePredictStatus` interface, which ships with Windows itself — no
+  external binary needed. See Real-World Amendment below.
+- `smartctl.exe` portable Windows build (smartmontools), bundled under
+  `Tools\` — optional/secondary: a fallback for ATA/SATA disks when WMI has
+  no data, and still the sole (required) source for NVMe disks.
 
 ## Success Criteria
 

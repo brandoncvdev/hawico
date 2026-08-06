@@ -19,8 +19,11 @@ El detalle normativo, los estados parciales y las reglas de privacidad están en
 
 ### Diagnóstico SMART de almacenamiento
 
-`Storage.Physical[]` agrega un campo opcional `Smart` con la forma devuelta por
-`ConvertFrom-SmartctlJson` (`Modules/Get-StorageInfo.ps1`):
+`Storage.Physical[]` agrega un campo opcional `Smart` con la misma forma sin
+importar el origen del dato — `ConvertFrom-AtaSmartAttributeTable` (WMI
+`root\wmi` `MSStorageDriver_FailurePredictData`, fuente primaria en discos
+ATA/SATA) o `ConvertFrom-SmartctlJson` (`smartctl.exe`, secundaria/opcional
+para ATA/SATA y única para NVMe) — ambas en `Modules/Get-StorageInfo.ps1`:
 
 ```text
 Smart
@@ -41,9 +44,15 @@ Smart
 └── ErrorMessage (string | null)
 ```
 
-Cuando `Tools\smartctl.exe` no está disponible o falla, `Supported` queda en
-`false` y `Source` en `'Unavailable'`; el resto de los campos permanece en
-`null` sin lanzar excepción.
+Para discos no NVMe, `Get-DiskSmartData` consulta primero WMI
+(`Get-DiskSmartDataFromWmi`, correlacionado vía `Win32_DiskDrive.PNPDeviceID`
+↔ `FailurePredictData.InstanceName`) — no requiere ningún binario externo. Solo
+si WMI no tiene datos (`Supported = $false`) recurre a `smartctl.exe`
+(`Tools\smartctl.exe`) como respaldo, si está presente. Los discos NVMe
+siguen dependiendo exclusivamente de `smartctl.exe` (`-d nvme`), sin cambios.
+Cuando ninguna fuente está disponible o falla, `Supported` queda en `false` y
+`Source` en `'Unavailable'`; el resto de los campos permanece en `null` sin
+lanzar excepción.
 
 Internamente, `Invoke-HealthCheck` (`Modules/Invoke-HealthCheck.ps1`) calcula el
 peor caso (worst-of) entre todos los discos vía `Get-StorageSmartSummary`

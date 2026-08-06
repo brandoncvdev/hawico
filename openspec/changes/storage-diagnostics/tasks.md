@@ -88,11 +88,11 @@ fixture bytes, not synthetic data):
 - Expected decode: Attr 5 (ReallocatedSectorCount) raw=0; Attr 9 (PowerOnHours) raw=22137; Attr 194 (Temperature, first raw byte only) =41; Attr 197 (PendingSectorCount) raw=0; Attr 198 (UncorrectableSectorCount) raw=0.
 - `Win32_DiskDrive.PNPDeviceID` = `SCSI\DISK&VEN_ST500DM0&PROD_05\4&3714EEF5&0&000000` ↔ `FailurePredictData.InstanceName` = `SCSI\Disk&Ven_ST500DM0&Prod_05\4&3714eef5&0&000000_0` (confirms the case-insensitive-prefix + trailing `_N` correlation rule).
 
-- [ ] 2c.1 RED: add `PNPDeviceID` to `Get-StorageInventory`'s `$physical` array
+- [x] 2c.1 RED: add `PNPDeviceID` to `Get-StorageInventory`'s `$physical` array
       (`Modules/Get-StorageInfo.ps1`) — new field alongside existing
       Model/Manufacturer/SerialNumber/etc., sourced from `Win32_DiskDrive`.
-- [ ] 2c.2 GREEN+REFACTOR: implement 2c.1.
-- [ ] 2c.3 RED: new pure fn `ConvertFrom-AtaSmartAttributeTable -RawBytes [byte[]]`
+- [x] 2c.2 GREEN+REFACTOR: implement 2c.1.
+- [x] 2c.3 RED: new pure fn `ConvertFrom-AtaSmartAttributeTable -RawBytes [byte[]]`
       — parses the 512-byte block into the SAME output shape
       `ConvertFrom-SmartctlJson` already returns (Supported/Source/
       OverallHealth/TemperatureCelsius/PowerOnHours/PowerCycleCount/
@@ -104,8 +104,8 @@ fixture bytes, not synthetic data):
       above; assert the exact expected decode values listed. Also cover:
       byte array shorter than 512 (malformed), all-zero block (no attributes
       present), unrecognized attribute IDs (skip gracefully, don't throw).
-- [ ] 2c.4 GREEN+REFACTOR: implement 2c.3.
-- [ ] 2c.5 RED: new fn `Get-DiskSmartDataFromWmi -PnpDeviceId [string]` —
+- [x] 2c.4 GREEN+REFACTOR: implement 2c.3.
+- [x] 2c.5 RED: new fn `Get-DiskSmartDataFromWmi -PnpDeviceId [string]` —
       queries `Get-CimInstance -Namespace root\wmi -ClassName
       MSStorageDriver_FailurePredictData` (and `...Status` for the
       `PredictFailure` boolean as `OverallHealth` when the full table can't
@@ -115,15 +115,15 @@ fixture bytes, not synthetic data):
       Cover: no matching instance (WMI class not populated for this disk),
       `Active=$false`, WMI namespace/class entirely unavailable (older
       Windows/driver) — all degrade to `Supported=$false`, never throw.
-- [ ] 2c.6 GREEN+REFACTOR: implement 2c.5.
-- [ ] 2c.7 RED: `Get-DiskSmartData` priority flip — for non-NVMe `BusType`,
+- [x] 2c.6 GREEN+REFACTOR: implement 2c.5.
+- [x] 2c.7 RED: `Get-DiskSmartData` priority flip — for non-NVMe `BusType`,
       try `Get-DiskSmartDataFromWmi` FIRST; only if that returns
       `Supported=$false` (or throws/unavailable), fall back to the existing
       `smartctl` sat-then-auto ladder (PR2/PR8, unchanged) IF `Tools\smartctl.exe`
       exists. NVMe path (`-d nvme` via smartctl) is UNCHANGED by this task —
       WMI FailurePredictData does not apply to NVMe.
-- [ ] 2c.8 GREEN+REFACTOR: implement 2c.7.
-- [ ] 2c.9 Update `openspec/changes/storage-diagnostics/proposal.md`'s
+- [x] 2c.8 GREEN+REFACTOR: implement 2c.7.
+- [x] 2c.9 Update `openspec/changes/storage-diagnostics/proposal.md`'s
       "Dependencies"/"Affected Areas" and `docs/JSON_SCHEMA.md` to reflect
       `smartctl.exe` as optional/secondary rather than a hard dependency.
 
