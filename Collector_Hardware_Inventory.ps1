@@ -37,6 +37,16 @@ $moduleFiles = @(
     "Get-UpgradeInfo.ps1",
     "Get-SecurityInfo.ps1",
     "Get-DeviceErrors.ps1",
+    # Storage-only findings for the full inventory report (Phase 8,
+    # storage-diagnostics): reuses the same STO-006..012 analysis engine
+    # already wired into Collector_Storage_Diagnostic.ps1 — no new engine,
+    # only these four additional modules plus the Invoke-HealthCheck
+    # pipeline call below.
+    "Get-HealthConfig.ps1",
+    "Get-StorageHealth.ps1",
+    "Get-HealthFindings.ps1",
+    "New-HealthCheckReport.ps1",
+    "Invoke-HealthCheck.ps1",
     "Export.ps1"
 )
 
@@ -113,6 +123,54 @@ try {
         }
     }
 
+    # Storage-only findings + raw SMART state for the full inventory report
+    # (Phase 8, storage-diagnostics): mirrors Collector_Storage_Diagnostic.ps1's
+    # empty-but-well-formed Performance/Events pattern so Invoke-HealthCheck
+    # (reused unmodified) only evaluates Storage — no new analysis engine, only
+    # this wiring plus the corresponding "Estado SMART"/findings section added
+    # to New-InventoryHtml (Modules/Export.ps1). Capabilities is stubbed the
+    # same way Get-HealthCapability's own DefaultData would be
+    # (IsAdministrator=$false, Items=@()) rather than dot-sourcing
+    # Get-HealthCapabilities.ps1/Invoke-HealthCollectorSection.ps1 — the
+    # STO-006..012 rules evaluated here never read Capabilities, only
+    # Metrics.Storage.Smart and the Storage* config thresholds, so that extra
+    # dependency would add nothing besides risk. A failure anywhere in this
+    # block is non-critical to the rest of the inventory and degrades to
+    # empty findings/recommendations instead of aborting the collector.
+    $storageFindings = @()
+    $storageRecommendations = @()
+    try {
+        $healthConfig = Get-HealthCheckConfig -Config $config
+        $storageHealthResult = Get-StorageHealth -StorageInventory $storage -SystemDrive $env:SystemDrive
+        $healthInputData = [ordered]@{
+            BaseInventory = [ordered]@{
+                Computer = $computerInfo.Computer
+                OperatingSystem = $computerInfo.OperatingSystem
+                BIOS = $computerInfo.BIOS
+                Motherboard = $computerInfo.Motherboard
+                Processors = @($processors)
+                Memory = $memory
+                Storage = $storage
+            }
+            Capabilities = [ordered]@{ IsAdministrator = $false; Items = @() }
+            HealthConfig = $healthConfig
+            Performance = [ordered]@{ Status = "Skipped"; ValidSampleCount = 0; CPU = @{}; Memory = @{} }
+            Storage = $storageHealthResult
+            Events = @()
+            EventStatus = "Skipped"
+            EventErrors = @()
+            ExtendedDiagnostics = [ordered]@{ ContractVersion = "1.0" }
+            Sections = @()
+            Sample = [ordered]@{ RequestedDurationSeconds = $null; ActualDurationSeconds = $null; IntervalSeconds = $null; ValidSampleCount = 0 }
+        }
+        $storageHealthCheck = Invoke-HealthCheck -InputData $healthInputData -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 0
+        $storageFindings = @($storageHealthCheck.HealthCheck.Findings)
+        $storageRecommendations = @($storageHealthCheck.HealthCheck.Recommendations)
+    }
+    catch {
+        Write-Verbose ("No se pudo evaluar la salud del almacenamiento: {0}" -f $_.Exception.Message)
+    }
+
     $collectedAt = [datetimeoffset]::Now
     $scriptUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 
@@ -135,6 +193,8 @@ try {
         Expansion = $expansion
         Security = $security
         DevicesWithErrors = $deviceErrors
+        StorageFindings = $storageFindings
+        StorageRecommendations = $storageRecommendations
     }
 
     # The launcher resolves the active organization profile's manual fields

@@ -2,7 +2,7 @@
 
 Collection Computer OperatingSystem BIOS Motherboard Processors Memory
 Storage GraphicsAdapters NetworkAdapters Security Expansion
-DevicesWithErrors
+DevicesWithErrors StorageFindings StorageRecommendations
 
 La extensión de diagnóstico de Windows conserva `SchemaVersion 2.0` y agrega:
 
@@ -84,6 +84,48 @@ Output/<hostname>/<hostname>-<timestamp>-storage.json
 Output/<hostname>/<hostname>-<timestamp>-storage.html
 Logs/<hostname>-<timestamp>-storage.log
 ```
+
+### Hallazgos de almacenamiento en el inventario completo (opciones 1/2)
+
+`Collector_Hardware_Inventory.ps1` agrega dos campos nuevos de nivel superior
+al JSON técnico `SchemaVersion 2.0` — `StorageFindings` y
+`StorageRecommendations` — reutilizando sin cambios el mismo motor de reglas
+`STO-006`..`STO-012` que ya usa el diagnóstico independiente (opción 10):
+tras capturar `Storage = Get-StorageInventory`, el recolector ejecuta
+`Get-StorageHealth -StorageInventory $storage -SystemDrive $env:SystemDrive`
+y luego `Invoke-HealthCheck` con el mismo patrón "vacío pero bien formado"
+de `Performance`/`Events` (`Status: "Skipped"`) que
+`Collector_Storage_Diagnostic.ps1` — solo `Storage` se evalúa. Únicamente se
+extraen `HealthCheck.Findings` y `HealthCheck.Recommendations`; el resto del
+reporte de salud (`Score`, `Sections`, etc.) se descarta y no se persiste.
+Esta evaluación es de solo presentación adicional: nunca aborta la
+recolección — una falla degrada silenciosamente ambos campos a `[]`.
+
+```text
+StorageFindings[]                 // misma forma que HealthCheck.Findings
+├── Id                            // p.ej. "STO-006".."STO-012"
+├── Category                      // "Storage"
+├── Severity                      // "Critical" | "High" | "Medium" | "Low"
+├── Title
+├── Description
+├── Evidence
+├── RecommendationId
+└── ScoreImpact
+
+StorageRecommendations[]          // misma forma que HealthCheck.Recommendations
+├── Id                            // p.ej. "REC-STO-001".."REC-STO-007"
+├── Title
+├── Description
+└── FindingIds[]
+```
+
+`Modules/Export.ps1` (`New-InventoryHtml`) renderiza estos dos campos como
+tablas nuevas bajo la sección "Almacenamiento", junto con una tabla de
+valores SMART crudos por disco ("Estado SMART") construida a partir de
+`Storage.Physical[].Smart` — mostrada siempre que al menos un disco tenga
+`Smart.Supported = true`, independientemente de si hubo hallazgos (nivel 2,
+distinto de los hallazgos condicionales de nivel 3). Cuando ningún disco
+soporta SMART, se muestra un mensaje informativo en vez de una tabla vacía.
 
 ## Registro importable de inventario
 

@@ -431,6 +431,76 @@ $memorySummary
         }) `
         -EmptyMessage "No se encontraron volúmenes locales."
 
+    # SMART section (Phase 8, storage-diagnostics): raw per-disk values are a
+    # Nivel-2 "estado" and are ALWAYS shown when at least one physical disk
+    # has Smart.Supported=$true, independent of whether any STO-006..012
+    # finding fired — findings/recommendations (Nivel-3) are a separate table
+    # below. Reuses the exact `.Smart` shape already carried on
+    # $storage.Physical[] (populated by Get-StorageInventory, PR2/PR9) and the
+    # findings/recommendations already computed by the Collector's
+    # Get-StorageHealth + Invoke-HealthCheck wiring, attached on $Inventory as
+    # StorageFindings/StorageRecommendations — no new analysis engine here.
+    $smartRows = @(
+        $storage.Physical | ForEach-Object {
+            $disk = $_
+            $smart = Get-InventoryPropertyValue -Object $disk -PropertyName "Smart"
+
+            if ($null -ne $smart -and [bool](Get-InventoryPropertyValue -Object $smart -PropertyName "Supported")) {
+                [pscustomobject][ordered]@{
+                    Model = Get-InventoryPropertyValue -Object $disk -PropertyName "Model"
+                    Source = Get-InventoryPropertyValue -Object $smart -PropertyName "Source"
+                    OverallHealth = Get-InventoryPropertyValue -Object $smart -PropertyName "OverallHealth"
+                    TemperatureCelsius = Get-InventoryPropertyValue -Object $smart -PropertyName "TemperatureCelsius"
+                    PowerOnHours = Get-InventoryPropertyValue -Object $smart -PropertyName "PowerOnHours"
+                    ReallocatedSectorCount = Get-InventoryPropertyValue -Object $smart -PropertyName "ReallocatedSectorCount"
+                    PendingSectorCount = Get-InventoryPropertyValue -Object $smart -PropertyName "PendingSectorCount"
+                    UncorrectableSectorCount = Get-InventoryPropertyValue -Object $smart -PropertyName "UncorrectableSectorCount"
+                    AvailableSparePercent = Get-InventoryPropertyValue -Object $smart -PropertyName "AvailableSparePercent"
+                    PercentageUsed = Get-InventoryPropertyValue -Object $smart -PropertyName "PercentageUsed"
+                }
+            }
+        }
+    )
+
+    $smartTable = New-InventoryTable `
+        -Rows $smartRows `
+        -Columns ([ordered]@{
+            "Modelo" = "Model"
+            "Origen" = "Source"
+            "Salud general" = "OverallHealth"
+            "Temperatura °C" = "TemperatureCelsius"
+            "Horas de uso" = "PowerOnHours"
+            "Sectores reasignados" = "ReallocatedSectorCount"
+            "Sectores pendientes" = "PendingSectorCount"
+            "Sectores irrecuperables" = "UncorrectableSectorCount"
+            "Repuesto disponible %" = "AvailableSparePercent"
+            "Desgaste %" = "PercentageUsed"
+        }) `
+        -EmptyMessage "Ningún disco físico reportó datos SMART compatibles en este equipo."
+
+    $storageFindingsData = @(Get-InventoryPropertyValue -Object $Inventory -PropertyName "StorageFindings")
+    $storageRecommendationsData = @(Get-InventoryPropertyValue -Object $Inventory -PropertyName "StorageRecommendations")
+
+    $storageFindingsTable = New-InventoryTable `
+        -Rows $storageFindingsData `
+        -Columns ([ordered]@{
+            "ID" = "Id"
+            "Severidad" = "Severity"
+            "Hallazgo" = "Title"
+            "Detalle" = "Description"
+        }) `
+        -EmptyMessage "No se detectaron hallazgos de salud en el almacenamiento."
+
+    $storageRecommendationsTable = New-InventoryTable `
+        -Rows $storageRecommendationsData `
+        -Columns ([ordered]@{
+            "ID" = "Id"
+            "Acción recomendada" = "Title"
+            "Detalle" = "Description"
+            "Hallazgos relacionados" = "FindingIds"
+        }) `
+        -EmptyMessage "No hay recomendaciones de almacenamiento para este equipo."
+
     $storageContent = @"
 <div class="grid">
 $(New-InventoryMetric -Label "Discos físicos instalados" -Value $storage.Upgrade.InstalledPhysicalDisks)
@@ -454,6 +524,21 @@ $(New-InventoryMetric -Label "Requiere verificación física" -Value $storage.Up
 <div class="subsection">
     <h3>Unidades y volúmenes</h3>
     $logicalDiskTable
+</div>
+
+<div class="subsection">
+    <h3>Estado SMART</h3>
+    $smartTable
+</div>
+
+<div class="subsection">
+    <h3>Hallazgos de almacenamiento</h3>
+    $storageFindingsTable
+</div>
+
+<div class="subsection">
+    <h3>Recomendaciones de almacenamiento</h3>
+    $storageRecommendationsTable
 </div>
 "@
 

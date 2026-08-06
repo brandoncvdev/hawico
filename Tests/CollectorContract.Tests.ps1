@@ -55,3 +55,26 @@ Describe 'Collector_Storage_Diagnostic.ps1 contract' {
   $script|Should -Match '\$logPath\s*=\s*Join-Path\s+\$logDir'
  }
 }
+
+Describe 'Collector_Hardware_Inventory.ps1 storage health wiring (Phase 8)' {
+ BeforeAll { $script=Get-Content "$PSScriptRoot/../Collector_Hardware_Inventory.ps1" -Raw }
+ It 'dot-sources the storage-health analysis pipeline modules' {
+  foreach($name in @('Get-HealthConfig.ps1','Get-StorageHealth.ps1','Get-HealthFindings.ps1','Invoke-HealthCheck.ps1')){$script|Should -Match ([regex]::Escape($name))}
+ }
+ It 'runs Get-StorageHealth against the captured storage inventory' {
+  $script|Should -Match 'Get-StorageHealth\s+-StorageInventory\s+\$storage\s+-SystemDrive\s+\$env:SystemDrive'
+ }
+ It 'runs Invoke-HealthCheck with an empty-but-well-formed Performance/Events pair, same as Collector_Storage_Diagnostic.ps1' {
+  $script|Should -Match 'Invoke-HealthCheck\s+-InputData'
+  $script|Should -Match '(?i)Status\s*=\s*"Skipped"'
+ }
+ It 'extracts HealthCheck.Findings/Recommendations and attaches them to the inventory result passed to New-InventoryHtml' {
+  $script|Should -Match '\$storageHealthCheck\.HealthCheck\.Findings'
+  $script|Should -Match '\$storageHealthCheck\.HealthCheck\.Recommendations'
+  $script|Should -Match 'StorageFindings\s*=\s*\$storageFindings'
+  $script|Should -Match 'StorageRecommendations\s*=\s*\$storageRecommendations'
+ }
+ It 'never lets a storage-health evaluation failure abort the rest of the inventory collection' {
+  $script|Should -Match '(?s)try\s*\{.*Invoke-HealthCheck.*\}\s*catch\s*\{'
+ }
+}
