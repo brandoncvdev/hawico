@@ -64,9 +64,9 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 6: HealthCheck Wiring (PR6) — domain: storage-health-findings
 
-- [ ] 6.1 RED `Tests/Invoke-HealthCheck.Tests.ps1`: `metrics.Storage.Smart` populated via `Get-StorageSmartSummary`; STO-006..012 reachable end-to-end.
-- [ ] 6.2 GREEN+REFACTOR: call `Get-StorageSmartSummary`, add `Smart` in `Modules/Invoke-HealthCheck.ps1`.
-- [ ] 6.3 Update `docs/JSON_SCHEMA.md` with the `.Smart` shape.
+- [x] 6.1 RED `Tests/Invoke-HealthCheck.Tests.ps1`: `metrics.Storage.Smart` populated via `Get-StorageSmartSummary`; STO-006..012 reachable end-to-end.
+- [x] 6.2 GREEN+REFACTOR: call `Get-StorageSmartSummary`, add `Smart` in `Modules/Invoke-HealthCheck.ps1`.
+- [x] 6.3 Update `docs/JSON_SCHEMA.md` with the `.Smart` shape.
 
 ## Phase 7: Standalone Collector (PR7) — domain: storage-diagnostic-collector
 

@@ -1,4 +1,4 @@
-﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"; . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1"; . "$PSScriptRoot/../Modules/Invoke-HealthCheck.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../Modules/Get-HealthFindings.ps1"; . "$PSScriptRoot/../Modules/Get-StorageHealth.ps1"; . "$PSScriptRoot/../Modules/New-HealthCheckReport.ps1"; . "$PSScriptRoot/../Modules/Invoke-HealthCheck.ps1" }
 Describe 'Invoke-HealthCheck' {
  It 'sums empty or incomplete evidence without relying on Measure-Object Sum' {
   (Get-HealthNumericSum -Items @() -PropertyName 'OccurrenceCount')|Should -Be 0
@@ -66,6 +66,28 @@ Describe 'Invoke-HealthCheck' {
   $section.ErrorMessage|Should -Match 'WHEA-Logger'
   $section.DurationMilliseconds|Should -Be 12
   ($r.HealthCheck.Errors|Where-Object Provider -eq 'WHEA-Logger').Code|Should -Be 'EVENT-PROVIDER-FAILED'
+ }
+ It 'populates metrics.Storage.Smart via Get-StorageSmartSummary so healthy SMART evidence raises no STO-006..012 findings' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@(@{HealthStatus='Healthy';MediaType='SSD';Smart=@{Supported=$true;OverallHealth='PASSED';TemperatureCelsius=40;PendingSectorCount=0;ReallocatedSectorCount=0;AvailableSparePercent=80;PercentageUsed=10;PowerOnHours=1000}});Volumes=@()};Events=@();EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-006'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-007'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-008'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-009'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-010'
+  $r.HealthCheck.Findings.Id|Should -Not -Contain 'STO-011'
+ }
+ It 'reaches STO-006..012 end-to-end through Invoke-HealthCheck when SMART evidence is degraded' {
+  $input=[ordered]@{BaseInventory=@{};Capabilities=@{IsAdministrator=$true;Items=@()};Performance=@{Status='Collected';ValidSampleCount=1;CPU=@{};Memory=@{}};Storage=@{Status='Collected';PhysicalDisks=@(@{HealthStatus='Healthy';MediaType='HDD';IsSystemDisk=$true;Smart=@{Supported=$true;OverallHealth='FAILED';TemperatureCelsius=70;PendingSectorCount=5;ReallocatedSectorCount=2;AvailableSparePercent=5;PercentageUsed=95;PowerOnHours=30000}});Volumes=@()};Events=@();EventStatus='Collected'}
+  $r=Invoke-HealthCheck -InputData $input -CollectedAt ([datetimeoffset]::Now)
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-006'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-007'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-008'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-009'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-010'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-011'
+  $r.HealthCheck.Findings.Id|Should -Contain 'STO-012'
+  ($r.HealthCheck.Findings|Where-Object Id -eq 'STO-007').Evidence.PendingSectorCount|Should -Be 5
  }
  It 'preserves extended diagnostics without changing scoring version' {
   $extended=[ordered]@{ContractVersion='1.0';Processes=@{Status='Collected';TopByCpu=@(@{Name='app';ProcessId=10})};StartupPrograms=@{Status='Collected';Items=@()};InstalledSoftware=@{Status='Collected';Items=@()}}

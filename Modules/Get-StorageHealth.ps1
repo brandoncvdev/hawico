@@ -23,7 +23,7 @@ function Get-WorstOfSmartValue {
 }
 
 function Get-StorageSmartSummary {
-    param([Parameter(Mandatory)][AllowNull()][object[]]$PhysicalDisks)
+    param([Parameter(Mandatory)][AllowNull()][AllowEmptyCollection()][object[]]$PhysicalDisks)
 
     $smartRecords = @(@($PhysicalDisks) | ForEach-Object { Get-StorageProperty -Object $_ -Name 'Smart' } | Where-Object { $null -ne $_ })
     $supported = @($smartRecords | Where-Object { [bool](Get-StorageProperty -Object $_ -Name 'Supported' -DefaultValue $false) })
