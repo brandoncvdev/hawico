@@ -45,9 +45,9 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 3: Aggregation (PR3) — domain: storage-inventory
 
-- [ ] 3.1 RED `Tests/Get-StorageHealth.Tests.ps1`: `.Smart` carried onto `$disks` via existing SerialNumber join.
-- [ ] 3.2 RED: `Get-StorageSmartSummary` worst-of across N disks (mixed health/wear/temperature).
-- [ ] 3.3 GREEN+REFACTOR: implement carry-through + `Get-StorageSmartSummary` in `Modules/Get-StorageHealth.ps1`.
+- [x] 3.1 RED `Tests/Get-StorageHealth.Tests.ps1`: `.Smart` carried onto `$disks` via existing SerialNumber join.
+- [x] 3.2 RED: `Get-StorageSmartSummary` worst-of across N disks (mixed health/wear/temperature).
+- [x] 3.3 GREEN+REFACTOR: implement carry-through + `Get-StorageSmartSummary` in `Modules/Get-StorageHealth.ps1`.
 
 ## Phase 4: Config Thresholds (PR4) — domain: storage-health-findings
 
