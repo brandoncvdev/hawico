@@ -53,6 +53,29 @@ subconjunto de campos salvo `Source`, `PowerCycleCount`, `ErrorCode` y
 `ErrorMessage`. Ese agregado es la evidencia que activa las reglas
 `STO-006`..`STO-012`, documentadas en [`HEALTH_CHECK.md`](HEALTH_CHECK.md).
 
+### Diagnóstico de almacenamiento independiente
+
+`Collector_Storage_Diagnostic.ps1` reutiliza sin cambios `Invoke-HealthCheck` y
+`Export-HealthCheck.ps1` (`Modules/Invoke-HealthCheck.ps1`,
+`Modules/Export-HealthCheck.ps1`) para producir el mismo contrato
+`SchemaVersion 2.0` / `HealthCheck.ContractVersion 1.2` descrito arriba, pero sin
+muestrear rendimiento (CPU/Memoria) ni consultar el registro de eventos: las
+secciones `Performance` y `Events` quedan siempre en `Status: "Skipped"` con
+`Score.Categories` marcando `CPU`, `Memory` y `Events` como `Available: false`.
+Solo `Storage` se evalúa, por lo que `Score.Status` es `InsufficientData` de
+forma intencional (`EvaluatedWeight` = 35, por debajo del umbral de 60 descrito
+en [`HEALTH_CHECK.md`](HEALTH_CHECK.md) §12.2) — no representa un fallo, sino la
+cobertura real de este diagnóstico enfocado.
+
+Artefactos, siguiendo la misma convención de subcarpeta por equipo que
+`Collector_Windows_HealthCheck.ps1`:
+
+```text
+Output/<hostname>/<hostname>-<timestamp>-storage.json
+Output/<hostname>/<hostname>-<timestamp>-storage.html
+Logs/<hostname>-<timestamp>-storage.log
+```
+
 ## Registro importable de inventario
 
 El recolector de hardware conserva el JSON técnico `SchemaVersion 2.0` y genera un
