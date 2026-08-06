@@ -194,6 +194,7 @@ try {
         -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits -FieldLabels $fieldLabels
     $visitTechnician = $visitContext.Technician
     $visitPresetValues = $visitContext.PresetValues
+    Update-InventoryConfigTechnician -ConfigPath $configPath -Technician $visitTechnician
 
     $collectionArguments = @{
         SessionId = $collectionSession.SessionId
@@ -411,6 +412,7 @@ try {
                     -OrganizationUnits $organizationUnits -DepartmentUnits $departmentUnits -FieldLabels $fieldLabels
                 $visitTechnician = $visitContext.Technician
                 $visitPresetValues = $visitContext.PresetValues
+                Update-InventoryConfigTechnician -ConfigPath $configPath -Technician $visitTechnician
                 $collectionArguments.Technician = $visitTechnician
                 $collectionArguments.PresetManualFieldValues = $visitPresetValues
 

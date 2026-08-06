@@ -66,3 +66,38 @@ function New-InventoryCollectionSession {
         Status = if ($isUnassigned) { 'Unassigned' } else { 'Active' }
     }
 }
+
+function Update-InventoryConfigTechnician {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Persists the visit-resolved Técnico to config.json so it survives across launches; a write failure degrades to a warning, never a throw.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [AllowNull()][string]$Technician
+    )
+
+    try {
+        $config = Get-Content -LiteralPath $ConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+
+        $currentTechnician = $null
+        if ($null -ne $config.CollectionSession -and
+            $config.CollectionSession.PSObject.Properties.Name -contains 'Technician') {
+            $currentTechnician = $config.CollectionSession.Technician
+        }
+
+        # Exact string compare: $visitTechnician always arrives through
+        # Get-SafeString upstream (never '', only $null or a trimmed value),
+        # so no extra normalization is needed here.
+        if ($currentTechnician -eq $Technician) {
+            return
+        }
+
+        $config.CollectionSession.Technician = $Technician
+        $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8 -ErrorAction Stop
+    }
+    catch {
+        Write-Warning ("No se pudo actualizar el Técnico en config.json: {0}" -f $_.Exception.Message)
+    }
+}
