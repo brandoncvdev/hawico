@@ -436,6 +436,7 @@ function Read-InventoryManualCapture {
         [AllowNull()][object[]]$OrganizationUnits = @(),
         [AllowNull()][object[]]$DepartmentUnits = @(),
         [AllowNull()][hashtable]$PresetValues = @{},
+        [AllowNull()][hashtable]$DefaultValues = @{},
         [AllowNull()][hashtable]$FieldLabels = @{}
     )
 
@@ -443,6 +444,7 @@ function Read-InventoryManualCapture {
     $hasOrganizationUnits = @($OrganizationUnits).Count -gt 0
     $hasDepartmentUnits = @($DepartmentUnits).Count -gt 0
     $hasPresetValues = $null -ne $PresetValues
+    $hasDefaultValues = $null -ne $DefaultValues
     # Set only while walking assignment.organizationUnitId, and read right
     # after by assignment.departmentUnitId (which must come later in
     # -FieldKeys for the cascade to work): the Id of whatever direction the
@@ -458,6 +460,20 @@ function Read-InventoryManualCapture {
         # below. Generic by design: not specific to any one field key.
         $rawValue = if ($hasPresetValues -and $PresetValues.ContainsKey($key)) {
             $PresetValues[$key]
+        }
+        # Host-history reuse: a value captured for this same computer on a
+        # prior collection is offered back as a visible, editable default —
+        # unlike -PresetValues above, the prompt is still shown, it is only
+        # pre-filled. Checked after -PresetValues (an already-resolved
+        # visit-level value always wins over old host history) and before
+        # the catalog/cascade/free-text prompt below, so a default replaces
+        # the catalog picker with a simple "Enter para mantener" prompt
+        # instead of forcing the technician back through the whole menu.
+        elseif ($hasDefaultValues -and $DefaultValues.ContainsKey($key)) {
+            $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
+            $previousValue = $DefaultValues[$key]
+            $answer = Get-SafeString (& $Prompter "$fieldLabel (Enter para mantener '$previousValue')")
+            if ($null -ne $answer) { $answer } else { $previousValue }
         }
         # doc07-Catalog-System.md: when an organization unit catalog is
         # configured, the technician picks from it instead of typing free

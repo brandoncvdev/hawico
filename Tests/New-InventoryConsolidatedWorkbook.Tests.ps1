@@ -347,6 +347,119 @@ Describe 'Get-InventoryConsolidatedRecords' {
     }
 }
 
+Describe 'Get-InventoryLatestHostRecord' {
+    # "Already collected" warning (Start-Inventory.ps1): before dispatching a
+    # new collection, the launcher looks in the host's own Output\<Hostname>\
+    # subfolder for the most recent prior *-record.json, so the technician can
+    # be warned instead of silently re-collecting.
+    BeforeEach {
+        $script:hostDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+    }
+
+    It 'returns null when the host output directory does not exist yet (first-ever collection for this computer)' {
+        Get-InventoryLatestHostRecord -HostOutputDirectory $script:hostDir | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when the host output directory exists but has no record files' {
+        New-Item -ItemType Directory -Path $script:hostDir -Force | Out-Null
+
+        Get-InventoryLatestHostRecord -HostOutputDirectory $script:hostDir | Should -BeNullOrEmpty
+    }
+
+    It 'returns the single record when only one exists' {
+        New-Item -ItemType Directory -Path $script:hostDir -Force | Out-Null
+        (New-FixtureRecord -CollectionId 'COL-ONLY') | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $script:hostDir 'PC-01-20260803-record.json') -Encoding UTF8
+
+        $result = Get-InventoryLatestHostRecord -HostOutputDirectory $script:hostDir
+
+        $result.CollectionId | Should -Be 'COL-ONLY'
+    }
+
+    It 'returns the most recently collected record when several exist for the same host (repeat collections)' {
+        New-Item -ItemType Directory -Path $script:hostDir -Force | Out-Null
+        (New-FixtureRecord -CollectionId 'COL-OLDER' -CollectedAt '2026-08-01T09:00:00-06:00') | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $script:hostDir 'PC-01-20260801-record.json') -Encoding UTF8
+        (New-FixtureRecord -CollectionId 'COL-NEWER' -CollectedAt '2026-08-03T09:00:00-06:00') | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $script:hostDir 'PC-01-20260803-record.json') -Encoding UTF8
+
+        $result = Get-InventoryLatestHostRecord -HostOutputDirectory $script:hostDir
+
+        $result.CollectionId | Should -Be 'COL-NEWER'
+    }
+
+    It 'is order-independent — same result regardless of which file is discovered first' {
+        New-Item -ItemType Directory -Path $script:hostDir -Force | Out-Null
+        (New-FixtureRecord -CollectionId 'COL-NEWER' -CollectedAt '2026-08-03T09:00:00-06:00') | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $script:hostDir 'AAA-record.json') -Encoding UTF8
+        (New-FixtureRecord -CollectionId 'COL-OLDER' -CollectedAt '2026-08-01T09:00:00-06:00') | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $script:hostDir 'ZZZ-record.json') -Encoding UTF8
+
+        $result = Get-InventoryLatestHostRecord -HostOutputDirectory $script:hostDir
+
+        $result.CollectionId | Should -Be 'COL-NEWER'
+    }
+}
+
+Describe 'Get-InventoryHostHistoryDefaultValues' {
+    # Prefill (Start-Inventory.ps1): unlike -PresetValues (silent skip), the
+    # prior record's values become visible, editable defaults for exactly 3
+    # keys — collection.observations is deliberately never defaulted, notes
+    # go stale and must always be captured fresh.
+    It 'returns an empty hashtable when there is no prior record' {
+        $result = Get-InventoryHostHistoryDefaultValues -PriorRecord $null -PresetValues @{}
+
+        @($result.Keys).Count | Should -Be 0
+    }
+
+    It 'extracts exactly the 3 documented keys from the prior record''s ManualFields' {
+        $priorRecord = New-FixtureRecord -ManualFields @(
+            [PSCustomObject]@{ Key = 'assignment.user.fullName'; Value = 'Juan Pérez' }
+            [PSCustomObject]@{ Key = 'assignment.organizationUnitId'; Value = 'Dirección Administrativa' }
+            [PSCustomObject]@{ Key = 'assignment.departmentUnitId'; Value = 'Recursos Humanos' }
+            [PSCustomObject]@{ Key = 'collection.observations'; Value = 'Nota de la visita anterior' }
+        )
+
+        $result = Get-InventoryHostHistoryDefaultValues -PriorRecord $priorRecord -PresetValues @{}
+
+        $result['assignment.user.fullName'] | Should -Be 'Juan Pérez'
+        $result['assignment.organizationUnitId'] | Should -Be 'Dirección Administrativa'
+        $result['assignment.departmentUnitId'] | Should -Be 'Recursos Humanos'
+    }
+
+    It 'never defaults collection.observations — notes must always be captured fresh' {
+        $priorRecord = New-FixtureRecord -ManualFields @(
+            [PSCustomObject]@{ Key = 'collection.observations'; Value = 'Nota de la visita anterior' }
+        )
+
+        $result = Get-InventoryHostHistoryDefaultValues -PriorRecord $priorRecord -PresetValues @{}
+
+        $result.ContainsKey('collection.observations') | Should -BeFalse
+    }
+
+    It 'never overrides an already-resolved visit-level PresetValues entry for the same key' {
+        $priorRecord = New-FixtureRecord -ManualFields @(
+            [PSCustomObject]@{ Key = 'assignment.organizationUnitId'; Value = 'Dirección Anterior' }
+        )
+
+        $result = Get-InventoryHostHistoryDefaultValues -PriorRecord $priorRecord `
+            -PresetValues @{ 'assignment.organizationUnitId' = 'Dirección Actual' }
+
+        $result.ContainsKey('assignment.organizationUnitId') | Should -BeFalse
+    }
+
+    It 'omits a key that has no value at all in the prior record' {
+        $priorRecord = New-FixtureRecord -ManualFields @(
+            [PSCustomObject]@{ Key = 'assignment.user.fullName'; Value = 'Juan Pérez' }
+        )
+
+        $result = Get-InventoryHostHistoryDefaultValues -PriorRecord $priorRecord -PresetValues @{}
+
+        $result.ContainsKey('assignment.organizationUnitId') | Should -BeFalse
+        $result.ContainsKey('assignment.departmentUnitId') | Should -BeFalse
+    }
+}
+
 Describe 'Get-InventoryDeduplicatedRecords' {
     # Bugfix: re-collecting the same physical computer (technician re-running
     # "Generar inventario completo", or a second visit) creates a brand-new

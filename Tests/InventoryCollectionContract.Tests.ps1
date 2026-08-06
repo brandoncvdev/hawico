@@ -49,6 +49,11 @@
         $script | Should -Match '-PresetValues\s+\$PresetManualFieldValues'
     }
 
+    It 'accepts host-history default manual field values, distinct from the silent-skip preset values (visible, editable defaults)' {
+        $script | Should -Match '\[AllowNull\(\)\]\[hashtable\]\$DefaultManualFieldValues'
+        $script | Should -Match '-DefaultValues\s+\$DefaultManualFieldValues'
+    }
+
     It 'accepts readable field labels for the manual capture prompts instead of raw dotted keys' {
         $script | Should -Match '\[AllowNull\(\)\]\[hashtable\]\$FieldLabels'
         $script | Should -Match '-FieldLabels\s+\$FieldLabels'

@@ -252,6 +252,106 @@ function Get-InventoryConsolidatedRecords {
     }
 }
 
+function Get-InventoryLatestHostRecord {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads existing record files without changing system state.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$HostOutputDirectory
+    )
+
+    # "Already collected" warning (Start-Inventory.ps1): a computer's own
+    # Output\<Hostname>\ subfolder may not exist yet at all (first-ever
+    # collection for this machine) — Get-InventoryConsolidatedRecords throws
+    # on a missing path, so that case is short-circuited here instead of
+    # forcing every caller to Test-Path first.
+    if (-not (Test-Path -LiteralPath $HostOutputDirectory)) {
+        return $null
+    }
+
+    $consolidated = Get-InventoryConsolidatedRecords -RecordsPath $HostOutputDirectory
+    $records = @(@($consolidated.Records) | Where-Object { $null -ne $_ })
+    if ($records.Count -eq 0) {
+        return $null
+    }
+
+    # Same "keep the most recent, unparsable/missing CollectedAt never wins"
+    # rule as Get-InventoryDeduplicatedRecords below — a single host's own
+    # subfolder only ever needs the newest of its own repeat collections, not
+    # cross-host identity matching.
+    $latest = $null
+    $latestCollectedAt = $null
+
+    foreach ($record in $records) {
+        $candidateCollectedAt = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $record.CollectedAt
+
+        $shouldReplace = $false
+        if ($null -eq $latest) {
+            $shouldReplace = $true
+        }
+        elseif ($null -eq $latestCollectedAt -and $null -ne $candidateCollectedAt) {
+            $shouldReplace = $true
+        }
+        elseif ($null -ne $latestCollectedAt -and $null -ne $candidateCollectedAt -and $candidateCollectedAt -gt $latestCollectedAt) {
+            $shouldReplace = $true
+        }
+
+        if ($shouldReplace) {
+            $latest = $record
+            $latestCollectedAt = $candidateCollectedAt
+        }
+    }
+
+    return $latest
+}
+
+function Get-InventoryHostHistoryDefaultValues {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Projects an in-memory prior record into a default-value hashtable without changing system state.'
+    )]
+    param(
+        [AllowNull()][object]$PriorRecord,
+        [AllowNull()][hashtable]$PresetValues = @{}
+    )
+
+    $defaultValues = @{}
+    if ($null -eq $PriorRecord) {
+        return $defaultValues
+    }
+
+    $hasPresetValues = $null -ne $PresetValues
+
+    # Exactly these 3 keys, by design: assignment.user.fullName,
+    # assignment.organizationUnitId, assignment.departmentUnitId.
+    # collection.observations is deliberately excluded — notes go stale, so
+    # it must always be prompted fresh with no default, every time.
+    $candidateKeys = @(
+        'assignment.user.fullName',
+        'assignment.organizationUnitId',
+        'assignment.departmentUnitId'
+    )
+
+    foreach ($key in $candidateKeys) {
+        # Precedence rule: an already-resolved visit-level PresetValues entry
+        # is more current/authoritative than old host history and must never
+        # be overridden by it.
+        if ($hasPresetValues -and $PresetValues.ContainsKey($key)) {
+            continue
+        }
+
+        $priorValue = Get-InventoryManualFieldValueByKey -ManualFields $PriorRecord.ManualFields -Key $key
+        if ($null -ne $priorValue) {
+            $defaultValues[$key] = $priorValue
+        }
+    }
+
+    return $defaultValues
+}
+
 function Get-InventoryDeduplicatedRecords {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',

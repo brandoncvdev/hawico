@@ -8,6 +8,7 @@ param(
     [AllowNull()][object[]]$OrganizationUnits = $null,
     [AllowNull()][object[]]$DepartmentUnits = $null,
     [AllowNull()][hashtable]$PresetManualFieldValues = $null,
+    [AllowNull()][hashtable]$DefaultManualFieldValues = $null,
     [AllowNull()][hashtable]$FieldLabels = $null
 )
 
@@ -166,7 +167,7 @@ try {
     $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
         Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
             -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits `
-            -PresetValues $PresetManualFieldValues -FieldLabels $FieldLabels
+            -PresetValues $PresetManualFieldValues -DefaultValues $DefaultManualFieldValues -FieldLabels $FieldLabels
     }
     else {
         ,@()

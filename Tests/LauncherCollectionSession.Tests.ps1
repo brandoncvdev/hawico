@@ -110,6 +110,51 @@
         $script | Should -Match 'Get-ChildItem\s+-LiteralPath\s+\$output\s+-Filter\s+"\*-health\.html"\s+-Recurse'
     }
 
+    It 'dot-sources the consolidated-workbook module for host-history record lookups' {
+        $script | Should -Match 'Modules\\New-InventoryConsolidatedWorkbook\.ps1'
+    }
+
+    It 'resolves the hostname the same way the collector itself does, before checking for a prior collection' {
+        $script | Should -Match "-replace\s+'\[\^a-zA-Z0-9_-\]'\s*,\s*'_'"
+    }
+
+    It 'defines a reusable prior-collection check before the main menu loop' {
+        # "Ya se recolectó este equipo" warning: resolved as its own function
+        # (same pattern as Read-InventoryVisitContext), not inlined into each
+        # menu branch, so it stays a single source of truth for both Full and
+        # Quick collection.
+        $script | Should -Match 'function\s+Read-InventoryPriorCollectionCheck'
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?\bdo\s*\{'
+    }
+
+    It 'looks up the most recent prior record for this host inside the prior-collection check' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Get-InventoryHostOutputDirectory.*?Get-InventoryLatestHostRecord'
+    }
+
+    It 'warns with the prior collection''s date/time and asks for confirmation before continuing' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Read-Host\s+"¿Desea continuar de todas formas\? \(S/N\)"'
+    }
+
+    It 'reports Proceed = false when the technician declines, so the caller can abort cleanly with no partial state' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Proceed\s*=\s*\$false'
+    }
+
+    It 'extracts host-history default values through the testable module function, forwarding the visit PresetValues for precedence' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Get-InventoryHostHistoryDefaultValues\s+-PriorRecord\s+\$priorRecord\s+-PresetValues\s+\$PresetValues'
+    }
+
+    It 'gates full inventory collection on the prior-collection check before invoking the collector' {
+        $script | Should -Match '(?s)"1"\s*\{.*?\$priorCollectionCheck\s*=\s*Read-InventoryPriorCollectionCheck.*?if\s*\(\s*\$priorCollectionCheck\.Proceed\s*\)\s*\{.*?&\s+\$collector\s+-Mode\s+Full\s+@collectionArguments'
+    }
+
+    It 'gates quick inventory collection on the prior-collection check before invoking the collector' {
+        $script | Should -Match '(?s)"2"\s*\{.*?\$priorCollectionCheck\s*=\s*Read-InventoryPriorCollectionCheck.*?if\s*\(\s*\$priorCollectionCheck\.Proceed\s*\)\s*\{.*?&\s+\$collector\s+-Mode\s+Quick\s+@collectionArguments'
+    }
+
+    It 'forwards the host-history default values into the collector arguments, distinct from PresetManualFieldValues' {
+        $script | Should -Match '\$collectionArguments\.DefaultManualFieldValues\s*=\s*\$priorCollectionCheck\.DefaultValues'
+    }
+
     It 'auto-generates a real SessionId when config.json does not pin one explicitly, before building the session' {
         # Bugfix: entering a Técnico via the visit-context prompt used to
         # leave the administration "Nuevos equipos" table showing

@@ -21,6 +21,7 @@ try {
     . (Join-Path $basePath "Modules\New-InventoryCollectionSession.ps1")
     . (Join-Path $basePath "Modules\InventoryOrganizationPackage.ps1")
     . (Join-Path $basePath "Modules\New-InventoryManualCapture.ps1")
+    . (Join-Path $basePath "Modules\New-InventoryConsolidatedWorkbook.ps1")
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 
@@ -203,6 +204,58 @@ try {
         PresetManualFieldValues = $visitPresetValues
         FieldLabels = $fieldLabels
     }
+    # Set separately (not inside the @{...} literal above): its real value is
+    # only known once Read-InventoryPriorCollectionCheck runs, right before
+    # each collection dispatch below — same "set after the fact" pattern menu
+    # option 9 already uses for PresetManualFieldValues.
+    $collectionArguments.DefaultManualFieldValues = @{}
+
+    # "Ya se recolectó este equipo" warning + host-history defaults: before
+    # dispatching Collector_Hardware_Inventory.ps1, check whether this host
+    # already has a prior *-record.json under Output\<Hostname>\
+    # (Get-InventoryHostOutputDirectory / Get-InventoryLatestHostRecord). If
+    # one exists, warn the technician with that collection's date/time and
+    # let them abort instead of silently re-collecting. Confirming (or no
+    # prior record at all) reuses Nombre/Dirección/Departamento from that
+    # record as visible, editable defaults (-DefaultManualFieldValues) —
+    # distinct from -PresetManualFieldValues above, which skips the prompt
+    # silently instead of just pre-filling it. A visit-level preset for the
+    # same key always wins over old host history (Get-InventoryHostHistoryDefaultValues
+    # enforces that precedence), so $PresetValues is forwarded through.
+    function Read-InventoryPriorCollectionCheck {
+        param(
+            [Parameter(Mandatory)][string]$Hostname,
+            [Parameter(Mandatory)][string]$OutputDirectory,
+            [AllowNull()][hashtable]$PresetValues = @{}
+        )
+
+        $hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $OutputDirectory -Hostname $Hostname
+        $priorRecord = Get-InventoryLatestHostRecord -HostOutputDirectory $hostOutputDir
+
+        if ($null -eq $priorRecord) {
+            return [ordered]@{ Proceed = $true; DefaultValues = @{} }
+        }
+
+        $priorCollectedAt = Get-InventoryWorkbookCollectedAtDateTime -CollectedAt $priorRecord.CollectedAt
+        $priorCollectedAtText = if ($null -ne $priorCollectedAt) {
+            $priorCollectedAt.ToString('dd/MM/yyyy HH:mm')
+        }
+        else {
+            'una fecha desconocida'
+        }
+
+        Write-Host ""
+        Write-Host "Este equipo ya tiene un inventario recolectado el $priorCollectedAtText." -ForegroundColor Yellow
+        $answer = Get-SafeString (Read-Host "¿Desea continuar de todas formas? (S/N)")
+
+        if ($null -eq $answer -or $answer -notmatch '^[sS]') {
+            Write-Host "Recolección cancelada." -ForegroundColor Yellow
+            return [ordered]@{ Proceed = $false; DefaultValues = @{} }
+        }
+
+        $defaultValues = Get-InventoryHostHistoryDefaultValues -PriorRecord $priorRecord -PresetValues $PresetValues
+        return [ordered]@{ Proceed = $true; DefaultValues = $defaultValues }
+    }
 
     function Wait-MenuInput {
         Write-Host ""
@@ -235,30 +288,52 @@ try {
 
         switch ($option) {
             "1" {
-                $result = & $collector -Mode Full @collectionArguments
+                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
+                $output = Join-Path $basePath $relativeOutput
+                $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
 
-                if ($null -ne $result -and $result.Success) {
-                    if (Test-Path -LiteralPath $result.HtmlPath) {
-                        Start-Process -FilePath $result.HtmlPath
+                $priorCollectionCheck = Read-InventoryPriorCollectionCheck -Hostname $hostname `
+                    -OutputDirectory $output -PresetValues $visitPresetValues
+
+                if ($priorCollectionCheck.Proceed) {
+                    $collectionArguments.DefaultManualFieldValues = $priorCollectionCheck.DefaultValues
+                    $result = & $collector -Mode Full @collectionArguments
+
+                    if ($null -ne $result -and $result.Success) {
+                        if (Test-Path -LiteralPath $result.HtmlPath) {
+                            Start-Process -FilePath $result.HtmlPath
+                        }
                     }
-                }
-                else {
-                    Write-Host "El inventario no pudo completarse." -ForegroundColor Red
+                    else {
+                        Write-Host "El inventario no pudo completarse." -ForegroundColor Red
+                    }
                 }
 
                 Wait-MenuInput
             }
 
             "2" {
-                $result = & $collector -Mode Quick @collectionArguments
+                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
+                $output = Join-Path $basePath $relativeOutput
+                $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
 
-                if ($null -ne $result -and $result.Success) {
-                    if (Test-Path -LiteralPath $result.HtmlPath) {
-                        Start-Process -FilePath $result.HtmlPath
+                $priorCollectionCheck = Read-InventoryPriorCollectionCheck -Hostname $hostname `
+                    -OutputDirectory $output -PresetValues $visitPresetValues
+
+                if ($priorCollectionCheck.Proceed) {
+                    $collectionArguments.DefaultManualFieldValues = $priorCollectionCheck.DefaultValues
+                    $result = & $collector -Mode Quick @collectionArguments
+
+                    if ($null -ne $result -and $result.Success) {
+                        if (Test-Path -LiteralPath $result.HtmlPath) {
+                            Start-Process -FilePath $result.HtmlPath
+                        }
                     }
-                }
-                else {
-                    Write-Host "El inventario no pudo completarse." -ForegroundColor Red
+                    else {
+                        Write-Host "El inventario no pudo completarse." -ForegroundColor Red
+                    }
                 }
 
                 Wait-MenuInput

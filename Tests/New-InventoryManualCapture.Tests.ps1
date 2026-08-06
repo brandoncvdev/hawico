@@ -416,6 +416,61 @@ Describe 'Read-InventoryManualCapture' {
         $result[0].Value | Should -Be 'Valor preseteado'
     }
 
+    It 'shows the prior value as a visible, editable default (host-history reuse) and uses it when the technician presses Enter' {
+        # Distinct from -PresetValues: the prompt is still shown (visible),
+        # not silently skipped — it just pre-fills with the prior value.
+        $calls = [System.Collections.Generic.List[string]]::new()
+        $prompter = { param($Key) $calls.Add($Key); $null }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.user.fullName') `
+            -Prompter $prompter `
+            -DefaultValues @{ 'assignment.user.fullName' = 'Juan Pérez' }
+
+        @($calls) | Should -Be @("Nombre completo del usuario (Enter para mantener 'Juan Pérez')")
+        $result[0].Value | Should -Be 'Juan Pérez'
+    }
+
+    It 'uses the typed answer instead of the default when the technician types a new value' {
+        $prompter = { param($Key) 'Ana López' }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.user.fullName') `
+            -Prompter $prompter `
+            -DefaultValues @{ 'assignment.user.fullName' = 'Juan Pérez' }
+
+        $result[0].Value | Should -Be 'Ana López'
+    }
+
+    It 'never invokes the organization unit catalog menu for a key that has a default value (editable free text instead)' {
+        $units = @(
+            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+        )
+        $prompter = { param($Key) $null }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId') `
+            -Prompter $prompter `
+            -OrganizationUnits $units `
+            -DefaultValues @{ 'assignment.organizationUnitId' = 'Dirección Anterior' }
+
+        $result[0].Value | Should -Be 'Dirección Anterior'
+    }
+
+    It 'a preset value always wins over a default value for the same key (visit context is more current than host history)' {
+        $calls = [ordered]@{ Count = 0 }
+        $prompter = { param($Key) $calls.Count++; 'no debería llamarse' }
+
+        $result = Read-InventoryManualCapture `
+            -FieldKeys @('assignment.organizationUnitId') `
+            -Prompter $prompter `
+            -PresetValues @{ 'assignment.organizationUnitId' = 'Valor de visita' } `
+            -DefaultValues @{ 'assignment.organizationUnitId' = 'Valor anterior del equipo' }
+
+        $calls.Count | Should -Be 0
+        $result[0].Value | Should -Be 'Valor de visita'
+    }
+
     It 'uses an organization-supplied label (FieldLabels, e.g. from custom-fields.json) for the free-text prompt instead of the raw key' {
         $calls = [System.Collections.Generic.List[string]]::new()
         $prompter = { param($Key) $calls.Add($Key); 'algún valor' }
