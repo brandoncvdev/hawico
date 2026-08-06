@@ -116,19 +116,19 @@ Describe 'Get-DiskSmartData' {
   Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'NVMe' | Out-Null
   Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'nvme' }
  }
- It 'omits the device-type flag (auto-detect) for a SATA bus' {
+ It 'tries the sat device-type flag first for a SATA bus, and succeeds without retrying when it works' {
   Mock Invoke-SmartctlCommand {
    [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
   }
   Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA' | Out-Null
-  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'sat' }
  }
- It 'omits the device-type flag (auto-detect) when the bus is unknown' {
+ It 'tries the sat device-type flag first when the bus is unknown ($null), and succeeds without retrying when it works' {
   Mock Invoke-SmartctlCommand {
    [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
   }
   Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType $null | Out-Null
-  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'sat' }
  }
  It 'tries the sat device-type flag first for a USB bus, and retries once with auto-detect when it fails' {
   $script:usbCallCount = 0
@@ -145,14 +145,45 @@ Describe 'Get-DiskSmartData' {
   Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
   $result.Supported | Should -BeTrue
  }
- It 'does not retry a non-USB bus after a failed invocation' {
+ It 'tries the sat device-type flag first for a RAID bus (OEM RAID/passthrough, e.g. Intel RST), and retries once with auto-detect when smartctl cannot identify the protocol through it' {
+  $script:raidCallCount = 0
+  Mock Invoke-SmartctlCommand {
+   $script:raidCallCount++
+   if ($script:raidCallCount -eq 1) {
+    return [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"RAID"}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+   }
+   return [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  $result = Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'RAID'
+  Should -Invoke Invoke-SmartctlCommand -Times 2
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'sat' }
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+  $result.Supported | Should -BeTrue
+  $result.Source | Should -Be 'ATA'
+ }
+ It 'tries the sat device-type flag first for an unrecognized ($null) bus, and retries once with auto-detect when smartctl cannot identify the protocol through it' {
+  $script:unknownCallCount = 0
+  Mock Invoke-SmartctlCommand {
+   $script:unknownCallCount++
+   if ($script:unknownCallCount -eq 1) {
+    return [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"SCSI"}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+   }
+   return [ordered]@{ Success = $true; StdOut = '{"device":{"protocol":"ATA"},"smart_status":{"passed":true}}'; ExitCode = 0; ErrorCode = $null; ErrorMessage = $null }
+  }
+  $result = Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType $null
+  Should -Invoke Invoke-SmartctlCommand -Times 2
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { $DeviceTypeFlag -eq 'sat' }
+  Should -Invoke Invoke-SmartctlCommand -Times 1 -ParameterFilter { [string]::IsNullOrEmpty($DeviceTypeFlag) }
+  $result.Supported | Should -BeTrue
+ }
+ It 'retries a non-USB bus with auto-detect after a hard invocation failure too, same as USB' {
   Mock Invoke-SmartctlCommand {
    [ordered]@{ Success = $false; StdOut = $null; ExitCode = 1; ErrorCode = 'SMARTCTL-PROCESS-ERROR'; ErrorMessage = 'error' }
   }
   Get-DiskSmartData -SmartctlPath 'C:\Tools\smartctl.exe' -DiskIndex 0 -BusType 'SATA' | Out-Null
-  Should -Invoke Invoke-SmartctlCommand -Times 1
+  Should -Invoke Invoke-SmartctlCommand -Times 2
  }
- It 'propagates a SMARTCTL-TIMEOUT error code from the invocation without throwing, using the 15s default timeout' {
+ It 'propagates a SMARTCTL-TIMEOUT error code from the invocation without throwing, using the 15s default timeout, and does not retry (would double the wait to 30s)' {
   Mock Invoke-SmartctlCommand {
    [ordered]@{ Success = $false; StdOut = $null; ExitCode = $null; ErrorCode = 'SMARTCTL-TIMEOUT'; ErrorMessage = 'smartctl no respondió en 15000 ms para el disco 0.' }
   }
@@ -161,6 +192,7 @@ Describe 'Get-DiskSmartData' {
   $result.Supported | Should -BeFalse
   $result.Source | Should -Be 'Unavailable'
   $result.ErrorCode | Should -Be 'SMARTCTL-TIMEOUT'
+  Should -Invoke Invoke-SmartctlCommand -Times 1
  }
  It 'degrades gracefully when the invocation succeeds but the stdout is not valid JSON' {
   Mock Invoke-SmartctlCommand {

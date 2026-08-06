@@ -43,6 +43,28 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 - [x] 2.4 RED — device-type flag: `nvme` for BusType=NVMe, `sat` for USB (retry once on failure), omitted otherwise.
 - [x] 2.5 GREEN+REFACTOR: implement `Invoke-SmartctlCommand`, `Get-DiskSmartData`, `-SmartctlPath` param; wire into `$physical` loop with per-disk try/catch and one `Test-Path` pre-check.
 
+## Phase 2b: RAID/passthrough device-type fallback (PR8) — domain: storage-inventory
+
+Real-world finding (2026-08-06, real Dell OptiPlex hardware): OEM desktops
+(Dell/Lenovo/Acer/HP/Gateway and others) commonly ship Intel RST configured
+in "RAID" mode even for a single passthrough disk — Windows/Get-PhysicalDisk
+reports `BusType = "RAID"` for what is physically a plain SATA disk. The
+existing device-type flag selection (`nvme` for NVMe, `sat`-then-auto for
+USB, bare `auto` for everything else) never tries `sat` for RAID/unrecognized
+bus types, so smartctl's auto-detect fails to see through the RAID/SCSI
+layer and returns `SMARTCTL-UNKNOWN-PROTOCOL` — confirmed against a real
+generated `*-storage.json` (both disks: the real HDD behind BusType=RAID and,
+separately and correctly, a USB flash drive with no SMART support at all —
+that second one is not a bug, plain USB flash media genuinely has no SMART).
+
+- [x] 2.6 RED: `Get-DiskSmartData` for BusType='RAID' (and any other value that
+      isn't 'NVMe') tries `-d sat` first, same as the existing USB path — not
+      bare `auto`. If `sat` also fails with an unknown-protocol result, falls
+      back to `auto`, same retry-then-degrade contract already established.
+- [x] 2.7 GREEN+REFACTOR: unify the USB and RAID/other-bus-type cases onto the
+      same `sat`-first-then-`auto` fallback ladder in `Get-DiskSmartData`; only
+      `NVMe` keeps its own direct `nvme` flag with no retry needed.
+
 ## Phase 3: Aggregation (PR3) — domain: storage-inventory
 
 - [x] 3.1 RED `Tests/Get-StorageHealth.Tests.ps1`: `.Smart` carried onto `$disks` via existing SerialNumber join.

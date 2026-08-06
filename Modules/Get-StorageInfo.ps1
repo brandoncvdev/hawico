@@ -159,6 +159,26 @@ function Invoke-SmartctlCommand {
     }
 }
 
+function Resolve-SmartctlInvocationResult {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Invocation)
+
+    if (-not $Invocation.Success) {
+        $result = ConvertFrom-SmartctlJson -SmartctlOutput $null
+        $result.ErrorCode = $Invocation.ErrorCode
+        $result.ErrorMessage = $Invocation.ErrorMessage
+        return $result
+    }
+
+    try {
+        $parsed = $Invocation.StdOut | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return ConvertFrom-SmartctlJson -SmartctlOutput $null
+    }
+
+    return ConvertFrom-SmartctlJson -SmartctlOutput $parsed
+}
+
 function Get-DiskSmartData {
     param(
         [Parameter(Mandatory)][string]$SmartctlPath,
@@ -166,35 +186,35 @@ function Get-DiskSmartData {
         [AllowNull()][string]$BusType
     )
 
-    $primaryFlag = switch ([string]$BusType) {
-        'NVMe' { 'nvme' }
-        'USB' { 'sat' }
-        default { $null }
-    }
+    $isNvme = [string]$BusType -eq 'NVMe'
+    $primaryFlag = if ($isNvme) { 'nvme' } else { 'sat' }
 
     $invocation = Invoke-SmartctlCommand -SmartctlPath $SmartctlPath -DiskIndex $DiskIndex -DeviceTypeFlag $primaryFlag
+    $result = Resolve-SmartctlInvocationResult -Invocation $invocation
 
-    if (-not $invocation.Success -and [string]$BusType -eq 'USB') {
-        # USB bridges frequently misreport under the vendor-agnostic `sat`
-        # flag; retry once with auto-detect instead of giving up on the disk.
+    # Any non-NVMe bus (including 'RAID'/'SCSI'/unrecognized/$null — common
+    # on Dell/Lenovo/Acer/HP/Gateway and other OEM desktops that ship Intel
+    # RST configured in RAID mode even for a single passthrough disk) tries
+    # -d sat first, then falls back to bare auto-detect: the same
+    # retry-then-degrade contract already established for USB, now applied
+    # uniformly instead of USB-only. A genuine SMARTCTL-TIMEOUT is never
+    # retried here — retrying would double the wait to 30s for a disk that
+    # is simply not responding. Any other invocation-level hard failure
+    # (e.g. a rejected -d sat flag) IS retried, matching the pre-existing
+    # USB contract. An invocation that ran fine but could not identify a
+    # supported protocol through the sat translation (the RAID/SCSI
+    # passthrough case) is also retried with bare auto-detect.
+    $needsRetry = (-not $isNvme) -and (
+        (-not $invocation.Success -and $invocation.ErrorCode -ne 'SMARTCTL-TIMEOUT') -or
+        ($invocation.Success -and $result.ErrorCode -eq 'SMARTCTL-UNKNOWN-PROTOCOL')
+    )
+
+    if ($needsRetry) {
         $invocation = Invoke-SmartctlCommand -SmartctlPath $SmartctlPath -DiskIndex $DiskIndex -DeviceTypeFlag $null
+        $result = Resolve-SmartctlInvocationResult -Invocation $invocation
     }
 
-    if (-not $invocation.Success) {
-        $result = ConvertFrom-SmartctlJson -SmartctlOutput $null
-        $result.ErrorCode = $invocation.ErrorCode
-        $result.ErrorMessage = $invocation.ErrorMessage
-        return $result
-    }
-
-    try {
-        $parsed = $invocation.StdOut | ConvertFrom-Json -ErrorAction Stop
-    }
-    catch {
-        return ConvertFrom-SmartctlJson -SmartctlOutput $null
-    }
-
-    return ConvertFrom-SmartctlJson -SmartctlOutput $parsed
+    return $result
 }
 
 function Get-StorageInventory {

@@ -9,3 +9,7 @@ testResults.xml
 
 # macOS Finder metadata.
 .DS_Store
+
+# Third-party portable binary (smartmontools, GPLv2) — never bundled in git,
+# see Tools/README.md for what to place here and why.
+Tools/smartctl.exe
