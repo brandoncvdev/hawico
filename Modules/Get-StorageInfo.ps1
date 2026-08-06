@@ -1,4 +1,98 @@
-﻿function Get-StorageInventory {
+﻿function Get-SmartctlPropertyValue {
+    param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
+    if ($Object.PSObject.Properties.Name -contains $Name) { return $Object.$Name }
+    return $null
+}
+
+function Get-SmartctlAtaAttributeRawValue {
+    param([AllowNull()][object[]]$Table, [Parameter(Mandatory)][int]$Id)
+    $match = @($Table) | Where-Object { [int](Get-SmartctlPropertyValue -Object $_ -Name 'id') -eq $Id } | Select-Object -First 1
+    if ($null -eq $match) { return $null }
+    $raw = Get-SmartctlPropertyValue -Object $match -Name 'raw'
+    return Get-SmartctlPropertyValue -Object $raw -Name 'value'
+}
+
+function ConvertFrom-SmartctlJson {
+    param([Parameter(Mandatory)][AllowNull()][object]$SmartctlOutput)
+
+    $result = [ordered]@{
+        Supported = $false
+        Source = 'Unavailable'
+        OverallHealth = $null
+        TemperatureCelsius = $null
+        PowerOnHours = $null
+        PowerCycleCount = $null
+        ReallocatedSectorCount = $null
+        PendingSectorCount = $null
+        UncorrectableSectorCount = $null
+        AvailableSparePercent = $null
+        PercentageUsed = $null
+        MediaErrorCount = $null
+        CriticalWarningFlags = $null
+        ErrorCode = $null
+        ErrorMessage = $null
+    }
+
+    $isParsedObject = $SmartctlOutput -is [System.Management.Automation.PSCustomObject] -or $SmartctlOutput -is [System.Collections.IDictionary]
+    if (-not $isParsedObject) {
+        $result.ErrorCode = 'SMARTCTL-PARSE-ERROR'
+        $result.ErrorMessage = 'smartctl output could not be parsed as JSON.'
+        return $result
+    }
+
+    $device = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'device'
+    $protocol = Get-SmartctlPropertyValue -Object $device -Name 'protocol'
+    $source = switch ($protocol) {
+        'ATA' { 'ATA' }
+        'NVMe' { 'NVMe' }
+        default { 'Unavailable' }
+    }
+
+    if ($source -eq 'Unavailable') {
+        $result.ErrorCode = 'SMARTCTL-UNKNOWN-PROTOCOL'
+        $result.ErrorMessage = 'smartctl output did not identify a supported ATA or NVMe protocol.'
+        return $result
+    }
+
+    $result.Supported = $true
+    $result.Source = $source
+
+    $smartStatus = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'smart_status'
+    $passed = Get-SmartctlPropertyValue -Object $smartStatus -Name 'passed'
+    $result.OverallHealth = if ($null -eq $passed) { $null } elseif ($passed) { 'PASSED' } else { 'FAILED' }
+
+    $temperature = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'temperature'
+    $result.TemperatureCelsius = Get-SmartctlPropertyValue -Object $temperature -Name 'current'
+
+    $powerOnTime = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'power_on_time'
+    $result.PowerOnHours = Get-SmartctlPropertyValue -Object $powerOnTime -Name 'hours'
+
+    $result.PowerCycleCount = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'power_cycle_count'
+
+    if ($source -eq 'ATA') {
+        $ataAttributes = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'ata_smart_attributes'
+        $table = @(Get-SmartctlPropertyValue -Object $ataAttributes -Name 'table')
+        $result.ReallocatedSectorCount = Get-SmartctlAtaAttributeRawValue -Table $table -Id 5
+        $result.PendingSectorCount = Get-SmartctlAtaAttributeRawValue -Table $table -Id 197
+        $result.UncorrectableSectorCount = Get-SmartctlAtaAttributeRawValue -Table $table -Id 198
+    }
+    else {
+        $nvmeLog = Get-SmartctlPropertyValue -Object $SmartctlOutput -Name 'nvme_smart_health_information_log'
+        $result.AvailableSparePercent = Get-SmartctlPropertyValue -Object $nvmeLog -Name 'available_spare'
+        $result.PercentageUsed = Get-SmartctlPropertyValue -Object $nvmeLog -Name 'percentage_used'
+        $result.MediaErrorCount = Get-SmartctlPropertyValue -Object $nvmeLog -Name 'media_errors'
+        $result.CriticalWarningFlags = Get-SmartctlPropertyValue -Object $nvmeLog -Name 'critical_warning'
+    }
+
+    return $result
+}
+
+function Get-StorageInventory {
     $physicalRaw = Get-CimDataSafe -ClassName "Win32_DiskDrive"
     $logicalRaw = Get-CimDataSafe -ClassName "Win32_LogicalDisk" -Filter "DriveType = 3"
 

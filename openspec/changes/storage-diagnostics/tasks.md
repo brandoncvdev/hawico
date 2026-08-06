@@ -32,8 +32,8 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 1: SMART JSON Parsing (PR1) — domain: storage-inventory
 
-- [ ] 1.1 RED `Tests/Get-StorageInfo.Tests.ps1` (new): `ConvertFrom-SmartctlJson` fixtures — ATA success, NVMe success, malformed/truncated JSON (threat matrix), missing-field. Assert `Supported`, `Source`, `ErrorCode`. Fails (fn missing).
-- [ ] 1.2 GREEN+REFACTOR: implement `ConvertFrom-SmartctlJson` in `Modules/Get-StorageInfo.ps1`; never throws, returns `Supported=$false`+`ErrorCode` on malformed input.
+- [x] 1.1 RED `Tests/Get-StorageInfo.Tests.ps1` (new): `ConvertFrom-SmartctlJson` fixtures — ATA success, NVMe success, malformed/truncated JSON (threat matrix), missing-field. Assert `Supported`, `Source`, `ErrorCode`. Fails (fn missing).
+- [x] 1.2 GREEN+REFACTOR: implement `ConvertFrom-SmartctlJson` in `Modules/Get-StorageInfo.ps1`; never throws, returns `Supported=$false`+`ErrorCode` on malformed input.
 
 ## Phase 2: SMART Invocation & Capture (PR2) — domain: storage-inventory
 
