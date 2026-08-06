@@ -326,7 +326,7 @@ Describe 'Get-InventoryCustomFieldDefinitions' {
 }
 
 Describe 'The real Config/Organizations/org-example package shipped in this repo' {
-    It 'resolves the same 6 manual fields already configured as the config.json fallback' {
+    It 'resolves the same 4 manual fields already configured as the config.json fallback' {
         $repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
 
         $result = Get-InventoryProfileManualFields -BasePath $repoOrganizationsRoot -OrganizationId 'org-example' `
@@ -336,8 +336,6 @@ Describe 'The real Config/Organizations/org-example package shipped in this repo
             'assignment.user.fullName',
             'assignment.organizationUnitId',
             'assignment.departmentUnitId',
-            'assignment.locationId',
-            'asset.assetTag',
             'collection.observations'
         )
     }

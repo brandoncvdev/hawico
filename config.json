@@ -19,8 +19,6 @@
     "assignment.user.fullName",
     "assignment.organizationUnitId",
     "assignment.departmentUnitId",
-    "assignment.locationId",
-    "asset.assetTag",
     "collection.observations"
   ],
   "Consolidation": {
