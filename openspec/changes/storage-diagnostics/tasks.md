@@ -51,8 +51,8 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 4: Config Thresholds (PR4) — domain: storage-health-findings
 
-- [ ] 4.1 RED: new `Storage*` keys load with documented defaults; misordered `StorageWearWarningPercent`/`HighPercent` or `StorageTemperatureWarningC`/`HighC` throws descriptive error.
-- [ ] 4.2 GREEN+REFACTOR: add keys + validation to `Modules/Get-HealthConfig.ps1`; add defaults to `config.json`.
+- [x] 4.1 RED: new `Storage*` keys load with documented defaults; misordered `StorageWearWarningPercent`/`HighPercent` or `StorageTemperatureWarningC`/`HighC` throws descriptive error.
+- [x] 4.2 GREEN+REFACTOR: add keys + validation to `Modules/Get-HealthConfig.ps1`; add defaults to `config.json`.
 
 ## Phase 5: STO-006..012 Findings (PR5) — domain: storage-health-findings
 
