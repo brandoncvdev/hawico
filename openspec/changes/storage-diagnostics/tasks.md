@@ -65,6 +65,68 @@ that second one is not a bug, plain USB flash media genuinely has no SMART).
       same `sat`-first-then-`auto` fallback ladder in `Get-DiskSmartData`; only
       `NVMe` keeps its own direct `nvme` flag with no retry needed.
 
+## Phase 2c: WMI FailurePredictData as primary SMART source (PR9) — domain: storage-inventory
+
+Real-World Amendment (2026-08-06, see proposal.md): `smartctl` cannot open
+the disk on the user's actual fleet (Dell RAID-mode, HP SATA-mode, both
+tested by hand, antivirus ruled out) — a documented Windows OEM-driver
+limitation, not fixable via `-d` flag selection (PR8 already exhausted
+every device type `smartctl` supports). The legacy `root\wmi`
+`MSStorageDriver_FailurePredictData`/`FailurePredictStatus` WMI classes
+return real, hand-verified SMART data on the same Dell where `smartctl`
+and `Get-StorageReliabilityCounter` both failed — a standard 512-byte ATA
+SMART attribute table (2-byte header + up to 30 × 12-byte attribute
+records: Id/FlagsLo/FlagsHi/Current/Worst/Raw[6]/Reserved), correlated to
+the physical disk via `Win32_DiskDrive.PNPDeviceID` matching
+`FailurePredictData.InstanceName` (case-insensitive, `InstanceName` has a
+trailing `_N`).
+
+**Real fixture data** (Dell OptiPlex 3050, Seagate ST500DM005, hand-decoded
+and verified against this exact task's RED tests — use as literal test
+fixture bytes, not synthetic data):
+- Raw 512-byte array: `16,0,1,47,0,100,100,0,5,0,0,0,0,0,2,38,0,252,252,0,0,0,0,0,0,0,3,35,0,83,74,198,20,0,0,0,0,0,4,50,0,99,99,91,7,0,0,0,0,0,5,51,0,252,252,0,0,0,0,0,0,0,7,46,0,252,252,0,0,0,0,0,0,0,8,36,0,252,252,0,0,0,0,0,0,0,9,50,0,100,100,121,86,0,0,0,0,0,10,50,0,252,252,0,0,0,0,0,0,0,11,50,0,252,252,0,0,0,0,0,0,0,12,50,0,99,99,250,6,0,0,0,0,0,191,34,0,100,100,29,0,0,0,0,0,0,192,34,0,252,252,0,0,0,0,0,0,0,194,2,0,59,44,41,0,11,0,56,0,0,195,58,0,100,100,0,0,0,0,0,0,0,196,50,0,252,252,0,0,0,0,0,0,0,197,50,0,252,100,0,0,0,0,0,0,0,198,48,0,252,252,0,0,0,0,0,0,0,199,54,0,92,92,160,16,0,0,0,0,0,200,42,0,100,100,24,37,0,0,0,0,0,223,50,0,252,252,0,0,0,0,0,0,0,225,50,0,84,84,116,138,2,0,0,0,0,0` followed by zero-padding to 512 bytes (trailing status region, non-attribute).
+- Expected decode: Attr 5 (ReallocatedSectorCount) raw=0; Attr 9 (PowerOnHours) raw=22137; Attr 194 (Temperature, first raw byte only) =41; Attr 197 (PendingSectorCount) raw=0; Attr 198 (UncorrectableSectorCount) raw=0.
+- `Win32_DiskDrive.PNPDeviceID` = `SCSI\DISK&VEN_ST500DM0&PROD_05\4&3714EEF5&0&000000` ↔ `FailurePredictData.InstanceName` = `SCSI\Disk&Ven_ST500DM0&Prod_05\4&3714eef5&0&000000_0` (confirms the case-insensitive-prefix + trailing `_N` correlation rule).
+
+- [ ] 2c.1 RED: add `PNPDeviceID` to `Get-StorageInventory`'s `$physical` array
+      (`Modules/Get-StorageInfo.ps1`) — new field alongside existing
+      Model/Manufacturer/SerialNumber/etc., sourced from `Win32_DiskDrive`.
+- [ ] 2c.2 GREEN+REFACTOR: implement 2c.1.
+- [ ] 2c.3 RED: new pure fn `ConvertFrom-AtaSmartAttributeTable -RawBytes [byte[]]`
+      — parses the 512-byte block into the SAME output shape
+      `ConvertFrom-SmartctlJson` already returns (Supported/Source/
+      OverallHealth/TemperatureCelsius/PowerOnHours/PowerCycleCount/
+      ReallocatedSectorCount/PendingSectorCount/UncorrectableSectorCount/
+      AvailableSparePercent=$null/PercentageUsed=$null/MediaErrorCount=$null/
+      CriticalWarningFlags=$null/ErrorCode/ErrorMessage) so downstream code
+      (`Get-StorageSmartSummary`, STO-006..012) needs zero changes — only the
+      `.Smart` object's origin changes. Test against the real fixture bytes
+      above; assert the exact expected decode values listed. Also cover:
+      byte array shorter than 512 (malformed), all-zero block (no attributes
+      present), unrecognized attribute IDs (skip gracefully, don't throw).
+- [ ] 2c.4 GREEN+REFACTOR: implement 2c.3.
+- [ ] 2c.5 RED: new fn `Get-DiskSmartDataFromWmi -PnpDeviceId [string]` —
+      queries `Get-CimInstance -Namespace root\wmi -ClassName
+      MSStorageDriver_FailurePredictData` (and `...Status` for the
+      `PredictFailure` boolean as `OverallHealth` when the full table can't
+      be parsed), correlates by `InstanceName` matching `PnpDeviceId`
+      (case-insensitive, allow `InstanceName` to carry a trailing `_N` the
+      `PnpDeviceId` doesn't have), calls `ConvertFrom-AtaSmartAttributeTable`.
+      Cover: no matching instance (WMI class not populated for this disk),
+      `Active=$false`, WMI namespace/class entirely unavailable (older
+      Windows/driver) — all degrade to `Supported=$false`, never throw.
+- [ ] 2c.6 GREEN+REFACTOR: implement 2c.5.
+- [ ] 2c.7 RED: `Get-DiskSmartData` priority flip — for non-NVMe `BusType`,
+      try `Get-DiskSmartDataFromWmi` FIRST; only if that returns
+      `Supported=$false` (or throws/unavailable), fall back to the existing
+      `smartctl` sat-then-auto ladder (PR2/PR8, unchanged) IF `Tools\smartctl.exe`
+      exists. NVMe path (`-d nvme` via smartctl) is UNCHANGED by this task —
+      WMI FailurePredictData does not apply to NVMe.
+- [ ] 2c.8 GREEN+REFACTOR: implement 2c.7.
+- [ ] 2c.9 Update `openspec/changes/storage-diagnostics/proposal.md`'s
+      "Dependencies"/"Affected Areas" and `docs/JSON_SCHEMA.md` to reflect
+      `smartctl.exe` as optional/secondary rather than a hard dependency.
+
 ## Phase 3: Aggregation (PR3) — domain: storage-inventory
 
 - [x] 3.1 RED `Tests/Get-StorageHealth.Tests.ps1`: `.Smart` carried onto `$disks` via existing SerialNumber join.
