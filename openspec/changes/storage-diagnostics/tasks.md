@@ -56,11 +56,11 @@ Individual PRs stay under budget except PR2 and PR5, which run close to it (Medi
 
 ## Phase 5: STO-006..012 Findings (PR5) — domain: storage-health-findings
 
-- [ ] 5.1 RED `Tests/Get-HealthRules.Tests.ps1`: STO-006 (FAILED self-assessment), STO-007 (pending sectors ≥ threshold), STO-008 (NVMe spare < critical/own threshold) → Critical + `RecommendationId`.
-- [ ] 5.2 RED: STO-009 (reallocated sectors, Medium-only, no Critical when pending=0), STO-010 (wear warning/high boundaries), STO-011 (temperature warning/high boundaries), STO-012 (HDD `PowerOnHours` ≥ service-life).
-- [ ] 5.3 GREEN+REFACTOR: implement STO-006..012 in `Get-HealthFinding` (`Modules/Get-HealthFindings.ps1`).
-- [ ] 5.4 RED: `Get-HealthRecommendation` returns `REC-STO-005/006/007`; STO-006/007/008 map to existing `REC-STO-001`.
-- [ ] 5.5 GREEN+REFACTOR: extend catalog in `Get-HealthRecommendation`.
+- [x] 5.1 RED `Tests/Get-HealthRules.Tests.ps1`: STO-006 (FAILED self-assessment), STO-007 (pending sectors ≥ threshold), STO-008 (NVMe spare < critical/own threshold) → Critical + `RecommendationId`.
+- [x] 5.2 RED: STO-009 (reallocated sectors, Medium-only, no Critical when pending=0), STO-010 (wear warning/high boundaries), STO-011 (temperature warning/high boundaries), STO-012 (HDD `PowerOnHours` ≥ service-life).
+- [x] 5.3 GREEN+REFACTOR: implement STO-006..012 in `Get-HealthFinding` (`Modules/Get-HealthFindings.ps1`).
+- [x] 5.4 RED: `Get-HealthRecommendation` returns `REC-STO-005/006/007`; STO-006/007/008 map to existing `REC-STO-001`.
+- [x] 5.5 GREEN+REFACTOR: extend catalog in `Get-HealthRecommendation`.
 
 ## Phase 6: HealthCheck Wiring (PR6) — domain: storage-health-findings
 
