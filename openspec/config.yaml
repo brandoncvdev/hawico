@@ -1,0 +1,53 @@
+schema: spec-driven
+
+context: |
+  Tech stack: PowerShell 5.1 (Windows-targeted inventory/health-check toolkit)
+  Architecture: Launcher -> Bootstrap -> Start-Inventory/Start-Administration -> Collector -> Modules -> JSON/HTML/XLSX export
+  Testing: Pester (Invoke-Pester -Path <files> -CI), Strict TDD active per global CLAUDE.md
+  Style: Single responsibility modules, defensive programming, stable JSON schema
+  Lint: PSScriptAnalyzer (PSScriptAnalyzerSettings.psd1), PSUseCompatibleSyntax target 5.1
+
+strict_tdd: true
+
+testing:
+  test_command: "Invoke-Pester -Path <files> -CI"
+  framework: Pester
+  convention: "Run only touched test files, never the full suite unless explicitly asked"
+  layers:
+    unit: true
+    integration: true
+    e2e: false
+  coverage:
+    available: false
+    command: ""
+  quality:
+    linter: "Invoke-ScriptAnalyzer -Settings PSScriptAnalyzerSettings.psd1"
+    type_checker: ""
+    formatter: ""
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Consider Windows/PowerShell 5.1 compatibility constraints
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing module conventions (single responsibility, defensive programming)
+      - Preserve stable JSON schema (see docs/JSON_SCHEMA.md)
+      - Write/adjust Pester tests alongside code changes (Strict TDD: red-green-refactor)
+    tdd: true
+    test_command: "Invoke-Pester -Path <files> -CI"
+  verify:
+    test_command: "Invoke-Pester -Path <files> -CI"
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
