@@ -171,18 +171,43 @@ function Format-InventoryMenuColumns {
             # padding on the last cell of a row — either the row is full
             # (last column) or the catalog ran out of items (last overall
             # entry) — so no trailing spaces are ever printed.
+            # "Tabla con líneas" request: a plain ASCII "| " between columns
+            # (never a Unicode box-drawing char — this prints on a real
+            # Windows console whose codepage is unverified, and this project
+            # already has one open encoding problem with accented characters
+            # there; a plain pipe can never make that worse) so entries don't
+            # visually run together in the packed multi-column layout.
             $isLastCellInRow = ($col -eq $Columns - 1) -or ($index -eq $safeEntries.Count - 1)
             if ($isLastCellInRow) {
                 $lineParts += $safeEntries[$index]
             }
             else {
-                $lineParts += $safeEntries[$index].PadRight($cellWidth)
+                $lineParts += ($safeEntries[$index].PadRight($cellWidth) + '| ')
             }
         }
         $lines += ($lineParts -join '')
     }
 
     return ,@($lines)
+}
+
+function Get-InventoryMenuBorder {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Builds a printable separator string without changing system state.'
+    )]
+    param(
+        [AllowNull()][string[]]$Lines
+    )
+
+    $safeLines = @(@($Lines) | Where-Object { $null -ne $_ })
+    if ($safeLines.Count -eq 0) {
+        return ''
+    }
+
+    $width = ($safeLines | Measure-Object -Property Length -Maximum).Maximum
+    return ('-' * $width)
 }
 
 function Get-InventoryConsoleWidth {
@@ -358,9 +383,16 @@ function Read-InventoryOrganizationUnitSelection {
     $consoleWidth = Get-InventoryConsoleWidth
     $columns = Get-InventoryMenuColumnCount -MaxEntryWidth $maxEntryWidth -ConsoleWidth $consoleWidth
     $lines = Format-InventoryMenuColumns -Entries $entries -Columns $columns
+    $border = Get-InventoryMenuBorder -Lines $lines
 
+    if (-not [string]::IsNullOrEmpty($border)) {
+        Write-Host "  $border"
+    }
     foreach ($line in $lines) {
         Write-Host "  $line"
+    }
+    if (-not [string]::IsNullOrEmpty($border)) {
+        Write-Host "  $border"
     }
 
     while ($true) {

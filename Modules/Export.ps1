@@ -570,6 +570,7 @@ $(New-InventoryPropertyGrid -Object $tpm -Fields ([ordered]@{
     "Versión de especificación" = "SpecVersion"
     "Fabricante" = "ManufacturerIdTxt"
     "Versión del fabricante" = "ManufacturerVersion"
+    "Nota" = "ErrorNote"
 }))
     </div>
 </div>

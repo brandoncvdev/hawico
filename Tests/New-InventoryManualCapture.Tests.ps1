@@ -804,7 +804,11 @@ Describe 'Get-InventoryMenuColumnCount' {
 }
 
 Describe 'Format-InventoryMenuColumns' {
-    It 'lays out entries row-major (left to right, then next row), padding every cell except the last one in each row' {
+    It 'lays out entries row-major (left to right, then next row), padding every cell except the last one in each row and separating columns with a plain "| "' {
+        # "Tabla con líneas" request: a visible ASCII separator between
+        # columns, plain "|" only (never a Unicode box-drawing character —
+        # this prints on a real Windows console whose codepage is unverified,
+        # see the open accents/encoding investigation for this same project).
         $entries = @(' 1. Uno', ' 2. Dos', ' 3. Tres', ' 4. Cuatro')
 
         $lines = Format-InventoryMenuColumns -Entries $entries -Columns 2
@@ -812,8 +816,8 @@ Describe 'Format-InventoryMenuColumns' {
         $lines.GetType().IsArray | Should -BeTrue
         $lines.Count | Should -Be 2
         $cellWidth = (' 4. Cuatro').Length + 4
-        $lines[0] | Should -Be (' 1. Uno'.PadRight($cellWidth) + ' 2. Dos')
-        $lines[1] | Should -Be (' 3. Tres'.PadRight($cellWidth) + ' 4. Cuatro')
+        $lines[0] | Should -Be (' 1. Uno'.PadRight($cellWidth) + '| ' + ' 2. Dos')
+        $lines[1] | Should -Be (' 3. Tres'.PadRight($cellWidth) + '| ' + ' 4. Cuatro')
     }
 
     It 'gives the last row a single, unpadded cell when the entry count does not divide evenly into columns' {
@@ -832,6 +836,21 @@ Describe 'Format-InventoryMenuColumns' {
         $fromNull.GetType().IsArray | Should -BeTrue
         $fromNull.Count | Should -Be 0
         $fromEmpty.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-InventoryMenuBorder' {
+    It 'returns a dash line as wide as the longest rendered line' {
+        $lines = @('short', 'a much longer line here')
+
+        $border = Get-InventoryMenuBorder -Lines $lines
+
+        $border | Should -Be ('-' * 'a much longer line here'.Length)
+    }
+
+    It 'returns an empty string without throwing when Lines is null or empty' {
+        Get-InventoryMenuBorder -Lines $null | Should -Be ''
+        Get-InventoryMenuBorder -Lines @() | Should -Be ''
     }
 }
 
