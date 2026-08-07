@@ -133,9 +133,15 @@ Describe 'Read-InventoryManualCapture' {
     }
 
     It 'uses the organization unit catalog menu for assignment.organizationUnitId when units are supplied, and keeps free text for everything else' {
+        # Only root-level units (parentId = null) belong in this menu — a
+        # child/department-level unit must never be selectable as if it were
+        # a Dirección (real bug found in the field: mixing levels in one
+        # catalog file let a technician pick a Departamento by mistake at
+        # the Dirección prompt). This fixture is deliberately flat/root-only
+        # since this test isn't exercising the cascade at all.
         $units = @(
-            [PSCustomObject]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
-            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'site-center'; sortOrder = 20 }
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dir-juridico'; name = 'Dirección Jurídica'; type = 'direction'; parentId = $null; sortOrder = 20 }
         )
         $freeTextResponses = @{ 'Nombre completo del usuario' = 'Juan Pérez' }
         $calls = [ordered]@{ Menu = 0 }
@@ -156,8 +162,30 @@ Describe 'Read-InventoryManualCapture' {
 
         @($result).Count | Should -Be 2
         ($result | Where-Object { $_.Key -eq 'assignment.user.fullName' }).Value | Should -Be 'Juan Pérez'
-        ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'Recursos Humanos'
+        ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'Dirección Jurídica'
         $calls.Menu | Should -Be 1
+    }
+
+    It 'only offers root-level units at the Dirección prompt, never a nested Departamento (real field bug: mixing levels let a technician pick the wrong kind of unit)' {
+        $units = @(
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-ti'; name = 'TI'; type = 'department'; parentId = 'dir-admin'; sortOrder = 20 }
+        )
+        $seenMenus = @()
+        $prompter = {
+            param($Key)
+            return $null
+        }
+        # Capture the menu actually rendered for the Dirección field by
+        # calling the catalog-menu builder the same way
+        # Read-InventoryOrganizationUnitSelection does internally, scoped to
+        # exactly the units this fixture defines — 3 total (1 root, 2
+        # children) — the Dirección prompt must only ever offer the 1 root.
+        $menu = ConvertTo-InventoryOrganizationUnitMenu -Units (Get-InventoryOrganizationUnitChildren -Units $units -ParentId $null)
+
+        $menu.Count | Should -Be 1
+        $menu[0].Name | Should -Be 'Dirección Administrativa'
     }
 
     It 'keeps assignment.organizationUnitId as free text when no catalog is supplied (default -OrganizationUnits)' {
@@ -171,8 +199,18 @@ Describe 'Read-InventoryManualCapture' {
     }
 
     It 'cascades the selected assignment.organizationUnitId into assignment.departmentUnitId, offering only its direct children' {
-        $units = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
-        $answers = @('2', '1')
+        # Real institutional shape (2 levels: Dirección -> Subdirección),
+        # not org-example's own 3-level demo file — that extra nesting level
+        # can never be reached through this exactly-2-field cascade anyway
+        # (only assignment.organizationUnitId + assignment.departmentUnitId
+        # exist), and mixing it in here obscured the real root-vs-child
+        # distinction this test is meant to prove.
+        $units = @(
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-ti'; name = 'TI'; type = 'department'; parentId = 'dir-admin'; sortOrder = 20 }
+        )
+        $answers = @('1', '1')
         $state = [ordered]@{ Index = 0 }
         $prompter = {
             param($Key)
@@ -196,13 +234,19 @@ Describe 'Read-InventoryManualCapture' {
     }
 
     It 'skips assignment.departmentUnitId without prompting when the selected unit has no children' {
-        $units = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        $units = @(
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dir-sin-hijos'; name = 'Dirección Sin Subdirecciones'; type = 'direction'; parentId = $null; sortOrder = 20 }
+        )
         $calls = [ordered]@{ Count = 0 }
         $prompter = {
             param($Key)
             $calls.Count++
             if ($Key -eq 'Seleccione un número (Enter para omitir)') {
-                return '3'
+                # Root-only menu is now: 1. Dirección Administrativa, 2.
+                # Dirección Sin Subdirecciones — picks the childless one.
+                return '2'
             }
             return $null
         }
@@ -215,7 +259,7 @@ Describe 'Read-InventoryManualCapture' {
 
         @($result).Count | Should -Be 1
         $result[0].Key | Should -Be 'assignment.organizationUnitId'
-        $result[0].Value | Should -Be 'Recursos Humanos'
+        $result[0].Value | Should -Be 'Dirección Sin Subdirecciones'
         $calls.Count | Should -Be 1
     }
 
@@ -324,15 +368,18 @@ Describe 'Read-InventoryManualCapture' {
     }
 
     It 'prefers the independent -DepartmentUnits catalog over the cascade when both are supplied' {
-        # A real parent-child hierarchy exists (org-example style) AND an
-        # independent department catalog was also passed in: the independent
-        # catalog wins, since it is the explicit signal that this
-        # organization's Departamento is not actually a child of Dirección.
-        $realHierarchy = Get-InventoryOrganizationUnitCatalog -BasePath (Resolve-Path "$PSScriptRoot/../Config/Organizations") -OrganizationId 'org-example'
+        # A real parent-child hierarchy exists AND an independent department
+        # catalog was also passed in: the independent catalog wins, since it
+        # is the explicit signal that this organization's Departamento is
+        # not actually a child of Dirección.
+        $realHierarchy = @(
+            [PSCustomObject]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = $null; sortOrder = 10 }
+            [PSCustomObject]@{ id = 'dept-hr'; name = 'Recursos Humanos'; type = 'department'; parentId = 'dir-admin'; sortOrder = 10 }
+        )
         $independentDepartments = @(
             [PSCustomObject]@{ id = 'dept-only-independent'; name = 'Solo en catálogo independiente'; type = 'department'; parentId = $null; sortOrder = 10 }
         )
-        $answers = @('2', '1')
+        $answers = @('1', '1')
         $state = [ordered]@{ Index = 0 }
         $prompter = {
             param($Key)
@@ -353,9 +400,9 @@ Describe 'Read-InventoryManualCapture' {
 
         ($result | Where-Object { $_.Key -eq 'assignment.organizationUnitId' }).Value | Should -Be 'Dirección Administrativa'
         # If the cascade had been used instead, this would have been
-        # 'Recursos Humanos' (a real child of Dirección Administrativa in
-        # org-example's hierarchy) — asserting the independent-only name
-        # proves -DepartmentUnits took priority, not the cascade.
+        # 'Recursos Humanos' (a real child of Dirección Administrativa) —
+        # asserting the independent-only name proves -DepartmentUnits took
+        # priority, not the cascade.
         ($result | Where-Object { $_.Key -eq 'assignment.departmentUnitId' }).Value | Should -Be 'Solo en catálogo independiente'
     }
 

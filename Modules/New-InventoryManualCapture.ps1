@@ -480,8 +480,17 @@ function Read-InventoryManualCapture {
         # text — but only for this one field, and only when a catalog was
         # actually supplied (backward-compatible free text otherwise).
         elseif ($key -eq 'assignment.organizationUnitId' -and $hasOrganizationUnits) {
+            # ConvertTo-InventoryOrganizationUnitMenu renders the FULL tree of
+            # whatever -Units it gets, children included — passing the whole
+            # catalog here would show every Departamento nested inside this
+            # "Dirección" prompt too, letting the technician pick a leaf
+            # (department-level) entry by mistake at the direction step. Only
+            # root-level units (parentId = null) belong in this first prompt;
+            # the cascade further below already narrows to the selected
+            # direction's own children for the Departamento field.
             $fieldLabel = Get-InventoryFieldLabel -Key $key -FieldLabels $FieldLabels
-            $selection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Prompter $Prompter -Label $fieldLabel
+            $rootOrganizationUnits = Get-InventoryOrganizationUnitChildren -Units $OrganizationUnits -ParentId $null
+            $selection = Read-InventoryOrganizationUnitSelection -Units $rootOrganizationUnits -Prompter $Prompter -Label $fieldLabel
             $selectedOrganizationUnitId = if ($null -ne $selection) { $selection.Id } else { $null }
             if ($null -ne $selection) { $selection.Name } else { $null }
         }

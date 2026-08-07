@@ -101,6 +101,15 @@
         $script | Should -Match '(?s)\$visitContext\s*=\s*Read-InventoryVisitContext.*?-FieldLabels\s+\$fieldLabels'
     }
 
+    It 'only offers root-level units at the Dirección prompt of the visit context, never a nested Departamento' {
+        # Real field bug: ConvertTo-InventoryOrganizationUnitMenu renders the
+        # FULL tree of whatever -Units it gets, children included — passing
+        # the whole catalog straight through let a technician pick a
+        # Departamento-level entry by mistake at the Dirección step. Must be
+        # filtered to root units (parentId = null) first.
+        $script | Should -Match '(?s)function\s+Read-InventoryVisitContext\s*\{.*?\$rootOrganizationUnits\s*=\s*Get-InventoryOrganizationUnitChildren\s+-Units\s+\$OrganizationUnits\s+-ParentId\s+\$null.*?Read-InventoryOrganizationUnitSelection\s+-Units\s+\$rootOrganizationUnits\s+-Label\s+\$directionLabel'
+    }
+
     It 'searches recursively for the last report/diagnostic, since outputs now live in per-hostname subfolders' {
         # Collector_Hardware_Inventory.ps1/Collector_Windows_HealthCheck.ps1
         # write into $outputDir\<Hostname>\... now (Get-InventoryHostOutputDirectory),

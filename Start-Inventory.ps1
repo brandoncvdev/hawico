@@ -147,7 +147,16 @@ try {
 
         $directionSelection = $null
         if ($hasOrganizationUnits) {
-            $directionSelection = Read-InventoryOrganizationUnitSelection -Units $OrganizationUnits -Label $directionLabel
+            # ConvertTo-InventoryOrganizationUnitMenu renders the FULL tree of
+            # whatever -Units it gets, children included — passing the whole
+            # catalog here would show every Departamento nested inside this
+            # "Dirección" prompt too, letting the technician pick a leaf
+            # (department-level) entry by mistake at the direction step. Only
+            # root-level units (parentId = null) belong in this first prompt;
+            # the cascade below already narrows to the selected direction's
+            # own children for the Departamento step.
+            $rootOrganizationUnits = Get-InventoryOrganizationUnitChildren -Units $OrganizationUnits -ParentId $null
+            $directionSelection = Read-InventoryOrganizationUnitSelection -Units $rootOrganizationUnits -Label $directionLabel
             if ($null -ne $directionSelection) {
                 $presetValues['assignment.organizationUnitId'] = $directionSelection.Name
             }
