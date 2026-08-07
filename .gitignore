@@ -3,6 +3,7 @@
 # reference format, not real data). Add other real per-institution folders
 # here the same way if this repo is ever shared across institutions.
 Config/Organizations/institucion-principal/
+Config/Organizations/capcee/
 
 # Pester CI run artifact, not project output.
 testResults.xml
