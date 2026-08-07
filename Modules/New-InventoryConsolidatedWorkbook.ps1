@@ -228,7 +228,7 @@ function Get-InventoryConsolidatedRecords {
 
     foreach ($file in $files) {
         try {
-            $parsed = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop |
+            $parsed = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop |
                 ConvertFrom-Json -ErrorAction Stop
             $records += $parsed
         }
