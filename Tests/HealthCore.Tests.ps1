@@ -67,6 +67,59 @@ Describe 'Get-HealthCheckConfig' {
             })
         } | Should -Throw '*TopProcessCount*'
     }
+
+    It 'returns the documented Storage threshold defaults when HealthCheck is absent' {
+        $result = Get-HealthCheckConfig -Config ([pscustomobject]@{
+            GenerateJSON = $true
+            GenerateHTML = $false
+        })
+
+        $result.StoragePendingSectorCriticalCount | Should -Be 1
+        $result.StorageAvailableSpareCriticalPercent | Should -Be 10
+        $result.StorageReallocatedSectorWarningCount | Should -Be 1
+        $result.StorageWearWarningPercent | Should -Be 70
+        $result.StorageWearHighPercent | Should -Be 90
+        $result.StorageTemperatureWarningC | Should -Be 55
+        $result.StorageTemperatureHighC | Should -Be 65
+        $result.StorageHddServiceLifeWarningHours | Should -Be 26280
+    }
+
+    It 'merges valid Storage threshold overrides' {
+        $result = Get-HealthCheckConfig -Config ([pscustomobject]@{
+            HealthCheck = [pscustomobject]@{
+                StoragePendingSectorCriticalCount = 2
+                StorageWearWarningPercent = 60
+                StorageWearHighPercent = 80
+            }
+        })
+
+        $result.StoragePendingSectorCriticalCount | Should -Be 2
+        $result.StorageWearWarningPercent | Should -Be 60
+        $result.StorageWearHighPercent | Should -Be 80
+        $result.StorageTemperatureWarningC | Should -Be 55
+    }
+
+    It 'rejects unordered wear thresholds' {
+        {
+            Get-HealthCheckConfig -Config ([pscustomobject]@{
+                HealthCheck = [pscustomobject]@{
+                    StorageWearWarningPercent = 95
+                    StorageWearHighPercent = 70
+                }
+            })
+        } | Should -Throw '*StorageWearWarningPercent*'
+    }
+
+    It 'rejects unordered temperature thresholds' {
+        {
+            Get-HealthCheckConfig -Config ([pscustomobject]@{
+                HealthCheck = [pscustomobject]@{
+                    StorageTemperatureWarningC = 65
+                    StorageTemperatureHighC = 65
+                }
+            })
+        } | Should -Throw '*StorageTemperatureWarningC*'
+    }
 }
 
 Describe 'Get-HealthScore' {

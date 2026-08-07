@@ -10,6 +10,14 @@
   $c.HealthCheck.MemoryHighPercent|Should -Be 85
   $c.HealthCheck.MemoryCriticalPercent|Should -Be 95
  $c.HealthCheck.TopProcessCount|Should -Be 10
+ $c.HealthCheck.StoragePendingSectorCriticalCount|Should -Be 1
+ $c.HealthCheck.StorageAvailableSpareCriticalPercent|Should -Be 10
+ $c.HealthCheck.StorageReallocatedSectorWarningCount|Should -Be 1
+ $c.HealthCheck.StorageWearWarningPercent|Should -Be 70
+ $c.HealthCheck.StorageWearHighPercent|Should -Be 90
+ $c.HealthCheck.StorageTemperatureWarningC|Should -Be 55
+ $c.HealthCheck.StorageTemperatureHighC|Should -Be 65
+ $c.HealthCheck.StorageHddServiceLifeWarningHours|Should -Be 26280
  }
 }
 

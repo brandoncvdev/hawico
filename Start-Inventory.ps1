@@ -4,6 +4,7 @@ try {
     $basePath = Split-Path -Parent $MyInvocation.MyCommand.Path
     $collector = Join-Path $basePath "Collector_Hardware_Inventory.ps1"
     $healthCollector = Join-Path $basePath "Collector_Windows_HealthCheck.ps1"
+    $storageCollector = Join-Path $basePath "Collector_Storage_Diagnostic.ps1"
     $configPath = Join-Path $basePath "config.json"
 
     if (-not (Test-Path -LiteralPath $collector)) {
@@ -11,6 +12,9 @@ try {
     }
     if (-not (Test-Path -LiteralPath $healthCollector)) {
         throw "No se encontró el diagnóstico de salud: $healthCollector"
+    }
+    if (-not (Test-Path -LiteralPath $storageCollector)) {
+        throw "No se encontró el diagnóstico de almacenamiento: $storageCollector"
     }
 
     if (-not (Test-Path -LiteralPath $configPath)) {
@@ -292,6 +296,7 @@ try {
         Write-Host "7. Abrir carpeta de logs"
         Write-Host "8. Salir"
         Write-Host "9. Cambiar contexto de esta visita (Dirección/Departamento/Técnico)"
+        Write-Host "10. Ejecutar diagnóstico de almacenamiento"
         Write-Host ""
 
         $option = Read-Host "Seleccione una opción"
@@ -425,6 +430,23 @@ try {
                 $collectionArguments.Technician = $visitTechnician
                 $collectionArguments.PresetManualFieldValues = $visitPresetValues
 
+                Wait-MenuInput
+            }
+
+            "10" {
+                $result = & $storageCollector -Mode Diagnostic
+                if ($null -ne $result -and $result.Success) {
+                    Write-Host ""
+                    Write-Host "Diagnóstico de almacenamiento finalizado correctamente." -ForegroundColor Green
+                    if (-not [string]::IsNullOrWhiteSpace($result.JsonPath)) { Write-Host "JSON: $($result.JsonPath)" }
+                    if (-not [string]::IsNullOrWhiteSpace($result.LogPath)) { Write-Host "Log:  $($result.LogPath)" }
+                    if (-not [string]::IsNullOrWhiteSpace($result.HtmlPath) -and (Test-Path -LiteralPath $result.HtmlPath)) {
+                        Write-Host "HTML: $($result.HtmlPath)"
+                        Start-Process -FilePath $result.HtmlPath
+                    }
+                    else { Write-Host "El reporte HTML está deshabilitado o no fue generado." -ForegroundColor Yellow }
+                }
+                else { Write-Host "El diagnóstico de almacenamiento no pudo completarse." -ForegroundColor Red }
                 Wait-MenuInput
             }
 

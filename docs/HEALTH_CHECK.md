@@ -103,6 +103,7 @@ hawico/
 ├── Start-Inventory.ps1
 ├── Collector_Hardware_Inventory.ps1
 ├── Collector_Windows_HealthCheck.ps1
+├── Collector_Storage_Diagnostic.ps1
 ├── config.json
 ├── Modules/
 │   ├── Common.ps1
@@ -118,6 +119,8 @@ hawico/
 │   ├── Get-HealthFindings.ps1
 │   ├── Export.ps1
 │   └── Export-HealthCheck.ps1
+├── Tools/
+│   └── smartctl.exe   (no distribuido — ver Tools/README.md)
 ├── Output/
 ├── Logs/
 └── docs/
@@ -741,6 +744,39 @@ exclusivamente del estado de la máquina que ejecuta las pruebas.
 - No confunde datos desconocidos con estados saludables.
 - Cumple la política de privacidad configurada.
 - Tiene pruebas deterministas para límites, scoring y fallos parciales.
+
+## 17.4 Diagnóstico de almacenamiento independiente
+
+`Collector_Storage_Diagnostic.ps1` (menú "10. Ejecutar diagnóstico de
+almacenamiento" en `Start-Inventory.ps1`) ofrece la captura SMART y las reglas
+`STO-006`..`STO-012` (evidencia `Smart` documentada en
+[`JSON_SCHEMA.md`](JSON_SCHEMA.md); la tabla de reglas §13.1 de este documento
+aún no cubre `STO-006`..`STO-012`, brecha preexistente desde su
+implementación) sin depender de una muestra de CPU/memoria ni de una consulta
+de eventos completa. Reutiliza `Invoke-HealthCheck` y
+`Export-HealthCheck.ps1` sin modificarlos (mismo motor de reglas, scoring y
+HTML que `Collector_Windows_HealthCheck.ps1`), mirando su misma estructura de
+orquestación, nombres de artefactos y carpeta por equipo, pero:
+
+- No dot-sourcea `Get-PerformanceHealth.ps1`, `Get-CriticalEvents.ps1` ni
+  `Get-ExtendedDiagnostics.ps1`.
+- No muestrea CPU/memoria: `Performance` viaja siempre con
+  `Status: "Skipped"`, `CPU: {}`, `Memory: {}`.
+- No consulta el registro de eventos: `Events` viaja siempre con
+  `Status: "Skipped"` y una lista vacía.
+
+Como consecuencia, `Score.Categories` marca `CPU`, `Memory` y `Events` como no
+disponibles y solo `Storage` (peso 35) se evalúa. `Score.Status` resulta
+`InsufficientData` de forma intencional — es la cobertura real, no un defecto
+del diagnóstico enfocado (§12.2, umbral de confianza 60).
+
+`Tools\smartctl.exe` (binario portable de smartmontools, ver
+`Tools/README.md`) no se distribuye con el repositorio. Cuando está ausente,
+`Get-StorageInventory` degrada de forma explícita cada disco a
+`Smart.Supported = false` / `Smart.Source = 'Unavailable'` /
+`Smart.ErrorCode = 'SMARTCTL-NOT-FOUND'` sin lanzar excepción ni afectar el
+resto de la captura de almacenamiento — comportamiento ya cubierto por
+`Tests/Get-StorageInfo.Tests.ps1` y `Tests/StorageDiagnosticIntegration.Tests.ps1`.
 
 ## 18. Evolución del contrato
 

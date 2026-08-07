@@ -117,6 +117,7 @@ function Invoke-HealthCheck {
             SystemFreePercent = $systemFreePercent
             SystemMediaType = $systemMediaType
             DiskEventCount = $diskEventCount
+            Smart = Get-StorageSmartSummary -PhysicalDisks $physicalDisks
         }
         Events = [pscustomobject][ordered]@{
             WHEACount = $wheaCount

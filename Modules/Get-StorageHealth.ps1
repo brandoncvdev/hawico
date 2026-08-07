@@ -14,6 +14,43 @@ function ConvertTo-HealthMediaType {
     return 'Unknown'
 }
 
+function Get-WorstOfSmartValue {
+    param([AllowNull()][object[]]$Values, [ValidateSet('Max', 'Min')][string]$Mode = 'Max')
+    $numeric = @($Values | Where-Object { $null -ne $_ } | ForEach-Object { [double]$_ })
+    if ($numeric.Count -eq 0) { return $null }
+    if ($Mode -eq 'Min') { return ($numeric | Measure-Object -Minimum).Minimum }
+    return ($numeric | Measure-Object -Maximum).Maximum
+}
+
+function Get-StorageSmartSummary {
+    param([Parameter(Mandatory)][AllowNull()][AllowEmptyCollection()][object[]]$PhysicalDisks)
+
+    $smartRecords = @(@($PhysicalDisks) | ForEach-Object { Get-StorageProperty -Object $_ -Name 'Smart' } | Where-Object { $null -ne $_ })
+    $supported = @($smartRecords | Where-Object { [bool](Get-StorageProperty -Object $_ -Name 'Supported' -DefaultValue $false) })
+
+    $overallHealth = if (@($smartRecords | Where-Object { (Get-StorageProperty -Object $_ -Name 'OverallHealth') -eq 'FAILED' }).Count -gt 0) {
+        'FAILED'
+    } elseif (@($smartRecords | Where-Object { (Get-StorageProperty -Object $_ -Name 'OverallHealth') -eq 'PASSED' }).Count -gt 0) {
+        'PASSED'
+    } else {
+        $null
+    }
+
+    return [ordered]@{
+        Supported = $supported.Count -gt 0
+        OverallHealth = $overallHealth
+        TemperatureCelsius = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'TemperatureCelsius' }) -Mode Max
+        PowerOnHours = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'PowerOnHours' }) -Mode Max
+        PendingSectorCount = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'PendingSectorCount' }) -Mode Max
+        ReallocatedSectorCount = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'ReallocatedSectorCount' }) -Mode Max
+        UncorrectableSectorCount = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'UncorrectableSectorCount' }) -Mode Max
+        AvailableSparePercent = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'AvailableSparePercent' }) -Mode Min
+        PercentageUsed = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'PercentageUsed' }) -Mode Max
+        MediaErrorCount = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'MediaErrorCount' }) -Mode Max
+        CriticalWarningFlags = Get-WorstOfSmartValue -Values @($smartRecords | ForEach-Object { Get-StorageProperty -Object $_ -Name 'CriticalWarningFlags' }) -Mode Max
+    }
+}
+
 function Get-StorageHealth {
     param([Parameter(Mandatory)][object]$StorageInventory, [Parameter(Mandatory)][string]$SystemDrive)
 
@@ -43,6 +80,7 @@ function Get-StorageHealth {
             HealthStatus = $healthStatus
             HealthSource = 'Get-PhysicalDisk'
             IsSystemDisk = $null
+            Smart = Get-StorageProperty -Object $base -Name 'Smart'
         }
     }
     if ($disks.Count -eq 0) {
@@ -60,6 +98,7 @@ function Get-StorageHealth {
                 HealthStatus = 'Unknown'
                 HealthSource = 'Unavailable'
                 IsSystemDisk = $null
+                Smart = Get-StorageProperty -Object $base -Name 'Smart'
             }
         }
     }

@@ -45,6 +45,14 @@
     "MemoryCriticalPercent": 95,
     "MinimumAvailableMemoryMB": 1024,
     "TopProcessCount": 10,
-    "IncludePersonallyIdentifiableInformation": false
+    "IncludePersonallyIdentifiableInformation": false,
+    "StoragePendingSectorCriticalCount": 1,
+    "StorageAvailableSpareCriticalPercent": 10,
+    "StorageReallocatedSectorWarningCount": 1,
+    "StorageWearWarningPercent": 70,
+    "StorageWearHighPercent": 90,
+    "StorageTemperatureWarningC": 55,
+    "StorageTemperatureHighC": 65,
+    "StorageHddServiceLifeWarningHours": 26280
   }
 }

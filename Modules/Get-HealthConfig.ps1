@@ -29,6 +29,14 @@ function Get-HealthCheckConfig {
         IncludePersonallyIdentifiableInformation = [bool](Get-HealthConfigProperty -Object $health -Name "IncludePersonallyIdentifiableInformation" -DefaultValue $false)
         GenerateJSON = [bool](Get-HealthConfigProperty -Object $Config -Name "GenerateJSON" -DefaultValue $true)
         GenerateHTML = [bool](Get-HealthConfigProperty -Object $Config -Name "GenerateHTML" -DefaultValue $true)
+        StoragePendingSectorCriticalCount = [int](Get-HealthConfigProperty -Object $health -Name "StoragePendingSectorCriticalCount" -DefaultValue 1)
+        StorageAvailableSpareCriticalPercent = [double](Get-HealthConfigProperty -Object $health -Name "StorageAvailableSpareCriticalPercent" -DefaultValue 10)
+        StorageReallocatedSectorWarningCount = [int](Get-HealthConfigProperty -Object $health -Name "StorageReallocatedSectorWarningCount" -DefaultValue 1)
+        StorageWearWarningPercent = [double](Get-HealthConfigProperty -Object $health -Name "StorageWearWarningPercent" -DefaultValue 70)
+        StorageWearHighPercent = [double](Get-HealthConfigProperty -Object $health -Name "StorageWearHighPercent" -DefaultValue 90)
+        StorageTemperatureWarningC = [double](Get-HealthConfigProperty -Object $health -Name "StorageTemperatureWarningC" -DefaultValue 55)
+        StorageTemperatureHighC = [double](Get-HealthConfigProperty -Object $health -Name "StorageTemperatureHighC" -DefaultValue 65)
+        StorageHddServiceLifeWarningHours = [int](Get-HealthConfigProperty -Object $health -Name "StorageHddServiceLifeWarningHours" -DefaultValue 26280)
     }
 
     if ($result.SampleDurationSeconds -lt 10 -or $result.SampleDurationSeconds -gt 300) {
@@ -48,6 +56,12 @@ function Get-HealthCheckConfig {
     }
     if ($result.CriticalFreeDiskPercent -ge $result.MinimumFreeDiskPercent) {
         throw "HealthCheck.CriticalFreeDiskPercent debe ser menor que MinimumFreeDiskPercent."
+    }
+    if (-not ($result.StorageWearWarningPercent -lt $result.StorageWearHighPercent)) {
+        throw "HealthCheck.StorageWearWarningPercent debe ser menor que StorageWearHighPercent."
+    }
+    if (-not ($result.StorageTemperatureWarningC -lt $result.StorageTemperatureHighC)) {
+        throw "HealthCheck.StorageTemperatureWarningC debe ser menor que StorageTemperatureHighC."
     }
 
     return $result
