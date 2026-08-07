@@ -42,7 +42,7 @@ function Get-InventoryOrganizationDefinition {
     }
 
     try {
-        return Get-Content -LiteralPath $paths.OrganizationFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        return Get-Content -LiteralPath $paths.OrganizationFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         Write-Warning ("No se pudo leer organization.json de '{0}': {1}" -f $normalizedOrganizationId, $_.Exception.Message)
@@ -76,7 +76,7 @@ function Get-InventoryProfileDefinition {
     }
 
     try {
-        return Get-Content -LiteralPath $profileFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        return Get-Content -LiteralPath $profileFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         Write-Warning ("No se pudo leer el perfil '{0}' de '{1}': {2}" -f $normalizedProfileId, $normalizedOrganizationId, $_.Exception.Message)
@@ -145,7 +145,7 @@ function Get-InventoryOrganizationUnitCatalog {
     }
 
     try {
-        $parsed = Get-Content -LiteralPath $catalogFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        $parsed = Get-Content -LiteralPath $catalogFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         Write-Warning ("No se pudo leer el catálogo de unidades organizacionales de '{0}': {1}" -f $normalizedOrganizationId, $_.Exception.Message)
@@ -185,7 +185,7 @@ function Get-InventoryDepartmentUnitCatalog {
     }
 
     try {
-        $parsed = Get-Content -LiteralPath $catalogFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        $parsed = Get-Content -LiteralPath $catalogFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         Write-Warning ("No se pudo leer el catálogo de departamentos de '{0}': {1}" -f $normalizedOrganizationId, $_.Exception.Message)
@@ -256,7 +256,7 @@ function Get-InventoryCustomFieldDefinitions {
     }
 
     try {
-        $parsed = Get-Content -LiteralPath $paths.CustomFieldsFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        $parsed = Get-Content -LiteralPath $paths.CustomFieldsFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         Write-Warning ("No se pudo leer custom-fields.json de '{0}': {1}" -f $normalizedOrganizationId, $_.Exception.Message)

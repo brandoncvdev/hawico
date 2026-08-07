@@ -29,7 +29,7 @@ $modules = @(
 foreach ($module in $modules) { . (Join-Path $basePath "Modules/$module") }
 
 $configPath = Join-Path $basePath 'config.json'
-$config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($null -ne $SampleDurationSeconds) {
     if ($config.PSObject.Properties.Name -notcontains 'HealthCheck') { $config | Add-Member -MemberType NoteProperty -Name HealthCheck -Value ([pscustomobject]@{}) }
     if ($config.HealthCheck.PSObject.Properties.Name -contains 'SampleDurationSeconds') { $config.HealthCheck.SampleDurationSeconds = $SampleDurationSeconds.Value }

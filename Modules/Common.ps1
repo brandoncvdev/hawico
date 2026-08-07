@@ -39,7 +39,7 @@ function Get-CollectorVersion {
     }
 
     try {
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     catch {
         Write-Warning ("No se pudo leer manifest.json: {0}" -f $_.Exception.Message)

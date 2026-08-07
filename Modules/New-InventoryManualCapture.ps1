@@ -385,14 +385,19 @@ function Read-InventoryOrganizationUnitSelection {
     $lines = Format-InventoryMenuColumns -Entries $entries -Columns $columns
     $border = Get-InventoryMenuBorder -Lines $lines
 
+    # A border only above/below the whole block wasn't enough — the
+    # technician still had to visually track which row a wrapped/adjacent
+    # entry belonged to. A dashed line between every row too, not just
+    # framing the block, so each row reads as its own clearly separated line
+    # of a real table.
     if (-not [string]::IsNullOrEmpty($border)) {
         Write-Host "  $border"
     }
     foreach ($line in $lines) {
         Write-Host "  $line"
-    }
-    if (-not [string]::IsNullOrEmpty($border)) {
-        Write-Host "  $border"
+        if (-not [string]::IsNullOrEmpty($border)) {
+            Write-Host "  $border"
+        }
     }
 
     while ($true) {

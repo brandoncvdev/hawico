@@ -26,7 +26,7 @@ function Get-InventoryAssetIndex {
         }
     }
 
-    $parsed = Get-Content -LiteralPath $IndexPath -Raw | ConvertFrom-Json
+    $parsed = Get-Content -LiteralPath $IndexPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
     $nextSequence = if ($null -ne $parsed.NextSequence) { [int]$parsed.NextSequence } else { 1 }
     # The whole pipeline is wrapped in @() (not just its input) so a saved
@@ -179,7 +179,7 @@ function Import-InventoryAdministrationSession {
 
         if ($null -ne $existingAssetId) {
             $assetPath = Join-Path $store.AssetsDirectory "$existingAssetId.json"
-            $asset = Get-Content -LiteralPath $assetPath -Raw | ConvertFrom-Json
+            $asset = Get-Content -LiteralPath $assetPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
             $assetManualFields = @(@($asset.ManualFields) | Where-Object { $null -ne $_ })
 
@@ -300,7 +300,7 @@ function Add-InventoryAssetManualReview {
         throw "No se encontró el activo: $AssetId"
     }
 
-    $asset = Get-Content -LiteralPath $assetPath -Raw | ConvertFrom-Json
+    $asset = Get-Content -LiteralPath $assetPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $manualFields = @(@($asset.ManualFields) | Where-Object { $null -ne $_ })
 
     $previousValue = Get-InventoryManualFieldValueByKey -ManualFields $manualFields -Key $Key

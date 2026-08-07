@@ -287,17 +287,36 @@ Describe 'Get-InventoryDepartmentUnitCatalog' {
     }
 }
 
-Describe 'The real Config/Organizations/institucion-principal package shipped in this repo' {
-    It 'exposes independent, flat Dirección and Departamento catalogs (no parent-child relationship)' {
-        $repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+Describe 'The real Config/Organizations/institucion-principal package (local-only, gitignored real institutional data)' {
+    # institucion-principal/ is real data, gitignored, never committed —
+    # this Describe only runs meaningfully on a machine that happens to have
+    # it locally (like the one this catalog was built on); it's a no-op
+    # skip elsewhere. Architecture switched from independent flat catalogs
+    # to a real Dirección->Subdirección cascade (2026-08-07, user-confirmed
+    # after a real usability bug: mixing levels in one flat file let a
+    # technician pick a Departamento by mistake at the Dirección prompt) —
+    # departments.json was moved aside (departments.json.bak-flat-mode) so
+    # Get-InventoryDepartmentUnitCatalog correctly returns empty and the
+    # cascade in organization-units.json takes over.
+    BeforeAll {
+        # Pester v5 discovery-vs-run scoping: a plain assignment directly in
+        # the Describe body only exists during discovery, not when the It
+        # block actually runs — must be set in BeforeAll (same pattern as
+        # every other Describe in this file) for use INSIDE the It body.
+        $script:repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+    }
 
+    # -Skip is a test-tree/discovery-time parameter (unlike the It body,
+    # which runs later) — it needs a self-contained expression here, not a
+    # BeforeAll-scoped variable that does not exist yet at discovery time.
+    It 'exposes a real Dirección->Subdirección cascade, not an independent flat Departamento catalog' -Skip:(-not (Test-Path -LiteralPath (Join-Path (Resolve-Path "$PSScriptRoot/../Config/Organizations") 'institucion-principal'))) {
         $directions = Get-InventoryOrganizationUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
         $departments = Get-InventoryDepartmentUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
 
         @($directions).Count | Should -BeGreaterThan 0
-        @($departments).Count | Should -BeGreaterThan 0
-        @($directions | Where-Object { $null -ne $_.parentId }).Count | Should -Be 0
-        @($departments | Where-Object { $null -ne $_.parentId }).Count | Should -Be 0
+        @($departments).Count | Should -Be 0
+        @($directions | Where-Object { $null -eq $_.parentId }).Count | Should -BeGreaterThan 0
+        @($directions | Where-Object { $null -ne $_.parentId }).Count | Should -BeGreaterThan 0
     }
 }
 

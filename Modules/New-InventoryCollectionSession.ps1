@@ -79,7 +79,7 @@ function Update-InventoryConfigTechnician {
     )
 
     try {
-        $config = Get-Content -LiteralPath $ConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
 
         $currentTechnician = $null
         if ($null -ne $config.CollectionSession -and

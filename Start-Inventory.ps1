@@ -23,7 +23,7 @@ try {
     . (Join-Path $basePath "Modules\New-InventoryManualCapture.ps1")
     . (Join-Path $basePath "Modules\New-InventoryConsolidatedWorkbook.ps1")
 
-    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
     # Resolve manual fields from the active organization's profile, if one
     # is configured; otherwise config.json's flat ManualFields list is used
@@ -298,7 +298,7 @@ try {
 
         switch ($option) {
             "1" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
                 $output = Join-Path $basePath $relativeOutput
                 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
@@ -324,7 +324,7 @@ try {
             }
 
             "2" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
                 $output = Join-Path $basePath $relativeOutput
                 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
@@ -366,7 +366,7 @@ try {
                 Wait-MenuInput
             }
             "4" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
                 $output = Join-Path $basePath $relativeOutput
 
@@ -375,7 +375,7 @@ try {
             }
 
             "5" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $relativeOutput = $config.OutputDirectory -replace '^[.][\\/]', ''
                 $output = Join-Path $basePath $relativeOutput
 
@@ -396,14 +396,14 @@ try {
             }
 
             "6" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $output = Join-Path $basePath ($config.OutputDirectory -replace '^[.][\\/]', '')
                 $last = Get-ChildItem -LiteralPath $output -Filter "*-health.html" -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
                 if ($null -ne $last) { Start-Process -FilePath $last.FullName }
                 else { Write-Host "Todavía no existe un diagnóstico de salud." -ForegroundColor Yellow; Wait-MenuInput }
             }
             "7" {
-                $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
                 $relativeLogs = $config.LogDirectory -replace '^[.][\\/]', ''
                 $logs = Join-Path $basePath $relativeLogs
 
