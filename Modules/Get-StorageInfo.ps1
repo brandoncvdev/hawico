@@ -183,9 +183,19 @@ function Test-WmiInstanceNameMatchesPnpDeviceId {
     # InstanceName carries a trailing "_N" WMI instance suffix the
     # PnpDeviceId does not (e.g. "...\4&3714eef5&0&000000_0" vs
     # "...\4&3714EEF5&0&000000") — comparing PnpDeviceId as a
-    # case-insensitive prefix of InstanceName handles both the casing
-    # difference and the suffix without needing to parse it off first.
-    return $InstanceName.StartsWith($PnpDeviceId, [System.StringComparison]::OrdinalIgnoreCase)
+    # case-insensitive prefix of InstanceName handles the casing
+    # difference and the suffix. A bare StartsWith is not enough on its
+    # own, though: two different disks can have PnpDeviceIds where one is
+    # a strict string prefix of the other (e.g. "...SERIAL123" vs
+    # "...SERIAL123X"), which would let the shorter one's query wrongly
+    # match the other disk's InstanceName too. The only legitimate
+    # remainder after the PnpDeviceId is WMI's own "_N" suffix (or nothing
+    # at all) — require exactly that instead of accepting any remainder.
+    if (-not $InstanceName.StartsWith($PnpDeviceId, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+    $remainder = $InstanceName.Substring($PnpDeviceId.Length)
+    return $remainder -match '^(_\d+)?$'
 }
 
 function Get-DiskSmartDataFromWmi {

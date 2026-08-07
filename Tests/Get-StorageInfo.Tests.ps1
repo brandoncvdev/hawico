@@ -271,6 +271,64 @@ Describe 'Get-DiskSmartDataFromWmi' {
   $r.ErrorCode | Should -Be 'WMI-SMART-NOT-FOUND'
   Should -Invoke Get-CimInstance -Times 0
  }
+ It 'never attaches a different disk''s SMART data when one disk''s PnpDeviceId is a strict string prefix of another disk''s InstanceName' {
+  # Real structural risk flagged by a test-suite review: correlation is a
+  # StartsWith prefix match. "...SERIAL123" is a literal string prefix of
+  # "...SERIAL123X_0" — a shorter disk's PnpDeviceId could otherwise wrongly
+  # match a completely different disk's InstanceName, attaching the wrong
+  # disk's SMART data. Only "SERIAL123X_0" exists here (a different disk's
+  # instance) — querying disk 1's own, shorter, unrelated PnpDeviceId must
+  # find nothing, not accidentally match this other disk.
+  Mock Get-CimInstance {
+   param($Namespace, $ClassName, $Filter)
+   if ($ClassName -eq 'MSStorageDriver_FailurePredictData') {
+    @([pscustomobject]@{ InstanceName = 'SCSI\DISK&VEN_A&PROD_B\SERIAL123X_0'; Active = $true; VendorSpecific = $script:WmiFixtureBytes })
+   }
+   else { @() }
+  }
+  $r = Get-DiskSmartDataFromWmi -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123'
+  $r.Supported | Should -BeFalse
+  $r.ErrorCode | Should -Be 'WMI-SMART-NOT-FOUND'
+ }
+ It 'still correctly matches its own instance when a colliding-prefix disk is also present' {
+  # The positive counterpart of the test above: disk 1's OWN instance
+  # (…SERIAL123_0, distinguishable here by a different PowerOnHours value)
+  # must still be found correctly even when a same-prefix different disk
+  # (…SERIAL123X_0) is present in the same WMI result set.
+  $ownBytes = [byte[]]((@(16, 0) + @(9, 50, 0, 100, 100, 1, 0, 0, 0, 0, 0, 0)) + (@(0) * (512 - 14)))
+  Mock Get-CimInstance {
+   param($Namespace, $ClassName, $Filter)
+   if ($ClassName -eq 'MSStorageDriver_FailurePredictData') {
+    @(
+     [pscustomobject]@{ InstanceName = 'SCSI\DISK&VEN_A&PROD_B\SERIAL123X_0'; Active = $true; VendorSpecific = $script:WmiFixtureBytes }
+     [pscustomobject]@{ InstanceName = 'SCSI\DISK&VEN_A&PROD_B\SERIAL123_0'; Active = $true; VendorSpecific = $ownBytes }
+    )
+   }
+   else { @() }
+  }
+  $r = Get-DiskSmartDataFromWmi -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123'
+  $r.Supported | Should -BeTrue
+  $r.PowerOnHours | Should -Be 1
+ }
+}
+
+Describe 'Test-WmiInstanceNameMatchesPnpDeviceId' {
+ It 'matches the exact PnpDeviceId plus the WMI "_N" instance suffix' {
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName 'SCSI\DISK&VEN_A&PROD_B\SERIAL123_0' -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123' | Should -BeTrue
+ }
+ It 'matches case-insensitively' {
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName 'scsi\disk&ven_a&prod_b\serial123_0' -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123' | Should -BeTrue
+ }
+ It 'rejects a different disk whose PnpDeviceId happens to be a strict string prefix of this InstanceName' {
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName 'SCSI\DISK&VEN_A&PROD_B\SERIAL123X_0' -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123' | Should -BeFalse
+ }
+ It 'rejects an InstanceName with no relation to the PnpDeviceId' {
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName 'SCSI\DISK&VEN_OTHER&PROD_X\9&aaaaaaaa&0&000000_0' -PnpDeviceId 'SCSI\DISK&VEN_A&PROD_B\SERIAL123' | Should -BeFalse
+ }
+ It 'returns $false for null/empty inputs' {
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName $null -PnpDeviceId 'X' | Should -BeFalse
+  Test-WmiInstanceNameMatchesPnpDeviceId -InstanceName 'X' -PnpDeviceId $null | Should -BeFalse
+ }
 }
 
 Describe 'Get-DiskSmartData' {
