@@ -1,4 +1,10 @@
 ﻿BeforeAll {
+    # Collector_Hardware_Inventory.ps1 runs under Set-StrictMode -Version
+    # Latest (its own line 15) — matched here so a property-access bug like
+    # the real one reported in the field (NextHop missing on some adapters'
+    # gateway objects) actually reproduces in this test file instead of
+    # silently returning $null the way it would under the Pester default.
+    Set-StrictMode -Version Latest
     . "$PSScriptRoot/../Modules/Common.ps1"
     . "$PSScriptRoot/../Modules/Get-NetworkInfo.ps1"
     if (-not (Get-Command Get-NetIPConfiguration -ErrorAction SilentlyContinue)) {
@@ -71,5 +77,54 @@ Describe 'Get-NetworkInventory' {
         $result = Get-NetworkInventory -IncludeIPv6 $true
 
         $result[0].IPv6Addresses.Count | Should -Be 2
+    }
+
+    It 'still reports every other field when a NIC has no default gateway ($null IPv4DefaultGateway)' {
+        $fixture = New-FixtureNetIPConfiguration
+        $fixture.IPv4DefaultGateway = $null
+        Mock Get-NetIPConfiguration { $fixture }
+
+        $result = Get-NetworkInventory -IncludeIPv6 $true
+
+        $result.Count | Should -Be 1
+        $result[0].MACAddress | Should -Be '00-11-22-33-44-55'
+        $result[0].IPv4Addresses.Count | Should -Be 1
+        $result[0].IPv4Gateways.GetType().IsArray | Should -BeTrue
+        $result[0].IPv4Gateways.Count | Should -Be 0
+    }
+
+    It 'still reports every other field when the gateway route object has no NextHop property at all (older NetTCPIP builds)' {
+        # Real-world report: on older Windows, Get-NetIPConfiguration can hand
+        # back a gateway entry that genuinely lacks NextHop — under strict
+        # mode a direct $_.NextHop access throws "property cannot be found",
+        # and since the whole adapter was previously built in one expression,
+        # that used to wipe out every adapter's data for the entire run.
+        $fixture = New-FixtureNetIPConfiguration
+        $fixture.IPv4DefaultGateway = @([PSCustomObject]@{ DestinationPrefix = '0.0.0.0/0' })
+        Mock Get-NetIPConfiguration { $fixture }
+
+        { Get-NetworkInventory -IncludeIPv6 $true } | Should -Not -Throw
+
+        $result = Get-NetworkInventory -IncludeIPv6 $true
+        $result.Count | Should -Be 1
+        $result[0].MACAddress | Should -Be '00-11-22-33-44-55'
+        $result[0].IPv4Addresses.Count | Should -Be 1
+        $result[0].IPv4Gateways.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-InventoryNetRouteNextHop' {
+    It 'returns $null for a $null route' {
+        Get-InventoryNetRouteNextHop -Route $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns $null when the route object has no NextHop property' {
+        $route = [PSCustomObject]@{ DestinationPrefix = '0.0.0.0/0' }
+        Get-InventoryNetRouteNextHop -Route $route | Should -BeNullOrEmpty
+    }
+
+    It 'returns the NextHop value when present' {
+        $route = [PSCustomObject]@{ NextHop = '192.168.1.1' }
+        Get-InventoryNetRouteNextHop -Route $route | Should -Be '192.168.1.1'
     }
 }
