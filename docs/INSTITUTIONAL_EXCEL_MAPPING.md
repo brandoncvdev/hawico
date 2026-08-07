@@ -36,13 +36,13 @@ El Excel es una proyección de presentación. No es la fuente de verdad.
 | P | TIPO RAM | Hardware/Calculated | Tipos distintos de `TechnicalData.Memory.Modules[].MemoryTypeName`; conflictos quedan para revisión. | Disponible con proyección |
 | Q | TIPO DISCO | Hardware/Calculated | Medios y buses de `Storage.Detailed[]`, con respaldo en `Storage.Physical[]`. | Disponible con proyección |
 | R | DISCO (GB) | Hardware/Calculated | Capacidades de discos físicos. El JSON conserva cada disco; Excel aplicará la regla institucional de presentación. | Disponible con proyección |
-| S | CANTIDAD REQUERIDA (memoria) | Assessment | Cantidad de módulos recomendados por la evaluación de memoria. | Pendiente de reglas versionadas |
-| T | MEMORIA REQUERIDA | Assessment | Capacidad y tipo recomendado. | Pendiente de reglas versionadas |
-| U | VELOCIDAD | Assessment | Velocidad recomendada compatible con los módulos detectados y la verificación física. | Pendiente de reglas versionadas |
-| V | CANTIDAD REQUERIDA (discos) | Assessment | Cantidad de unidades recomendadas. | Pendiente de reglas versionadas |
-| W | DISCOS SSD REQUERIDA | Assessment | Capacidad y tecnología recomendada. | Pendiente de reglas versionadas |
-| X | CANTIDAD REQUERIDA (cambio) | Assessment/ManualReview | Valor numérico utilizado por el consolidado. | Pendiente de reglas versionadas |
-| Y | CAMBIO DE EQUIPO | Assessment/ManualReview | Motivo o recomendación de reemplazo. | Pendiente de reglas versionadas |
+| — | ~~CANTIDAD REQUERIDA (memoria)~~ | Assessment | Removida (2026-08-07): no existe motor de recomendación de memoria en hawico, ni SMART aporta datos de RAM. Rellenarla habría sido inventar un valor. | Eliminada de la plantilla |
+| — | ~~MEMORIA REQUERIDA~~ | Assessment | Removida (2026-08-07), mismo motivo que la anterior. | Eliminada de la plantilla |
+| — | ~~VELOCIDAD~~ | Assessment | Removida (2026-08-07), mismo motivo que la anterior. | Eliminada de la plantilla |
+| — | ~~CANTIDAD REQUERIDA (discos)~~ | Assessment | Removida (2026-08-07): SMART reporta *estado* de un disco, no una regla de cuántas unidades/qué capacidad instalar. | Eliminada de la plantilla |
+| — | ~~DISCOS SSD REQUERIDA~~ | Assessment | Removida (2026-08-07), mismo motivo que la anterior. | Eliminada de la plantilla |
+| X | CANTIDAD REQUERIDA (cambio) | Assessment (SMART) | `Get-InventoryStorageReplacementAssessment` sobre `TechnicalData.StorageFindings` (proyección de `Get-StorageSmartSummary`/STO-006..012). `1` si hay al menos un hallazgo `Critical`/`High` de almacenamiento; `null` si no. `Get-StorageSmartSummary` agrega "peor caso" entre todos los discos, así que no identifica cuál disco específico — no se inventa un conteo por disco. | Disponible |
+| Y | CAMBIO DE EQUIPO | Assessment (SMART) | Títulos (join `; `) de los hallazgos `Critical`/`High` que dispararon la columna X. `null` si X es `null`. | Disponible |
 | Z | S.O | Windows | `TechnicalData.OperatingSystem.Caption`. | Disponible |
 
 ## Campos adicionales que no caben en la plantilla

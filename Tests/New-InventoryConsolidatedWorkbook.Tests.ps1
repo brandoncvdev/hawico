@@ -60,7 +60,8 @@
             [AllowNull()][object[]]$StorageDetailed = @(
                 [PSCustomObject]@{ FriendlyName = 'Samsung SSD 970 EVO'; MediaType = 'SSD'; BusType = 'NVMe'; SizeGB = 476.94 }
                 [PSCustomObject]@{ FriendlyName = 'WDC WD10EZEX'; MediaType = 'HDD'; BusType = 'SATA'; SizeGB = 931.51 }
-            )
+            ),
+            [AllowNull()][object[]]$StorageFindings = @()
         )
 
         return [PSCustomObject]@{
@@ -103,6 +104,7 @@
                     Physical = $StoragePhysical
                     Detailed = $StorageDetailed
                 }
+                StorageFindings = $StorageFindings
             }
             ManualFields = $ManualFields
             Assessments = @()
@@ -157,8 +159,6 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
             'MARCA', 'MODELO', 'PC / LAPTOP', 'PROCESADOR', 'GHz',
             'RAM INSTALADA', 'MODULOS INSTALADOS', 'SLOTS RAM', 'RAM MAX (GB)',
             'TIPO RAM', 'TIPO DISCO', 'DISCO (GB)',
-            'CANTIDAD REQUERIDA (MEMORIA)', 'MEMORIA REQUERIDA', 'VELOCIDAD',
-            'CANTIDAD REQUERIDA (DISCOS)', 'DISCOS SSD REQUERIDA',
             'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O'
         )
     }
@@ -200,17 +200,55 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         $row.'DEPARTAMENTO' | Should -Be 'Recursos Humanos'
     }
 
-    It 'leaves PC / LAPTOP and every Assessment column null (not implemented yet)' {
+    It 'leaves PC / LAPTOP null (no chassis detector implemented yet)' {
         $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord)
 
         $row.'PC / LAPTOP' | Should -BeNullOrEmpty
-        $row.'CANTIDAD REQUERIDA (MEMORIA)' | Should -BeNullOrEmpty
-        $row.'MEMORIA REQUERIDA' | Should -BeNullOrEmpty
-        $row.'VELOCIDAD' | Should -BeNullOrEmpty
-        $row.'CANTIDAD REQUERIDA (DISCOS)' | Should -BeNullOrEmpty
-        $row.'DISCOS SSD REQUERIDA' | Should -BeNullOrEmpty
+    }
+
+    It 'leaves CANTIDAD REQUERIDA (CAMBIO) and CAMBIO DE EQUIPO null when there are no storage findings' {
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord -StorageFindings @())
+
         $row.'CANTIDAD REQUERIDA (CAMBIO)' | Should -BeNullOrEmpty
         $row.'CAMBIO DE EQUIPO' | Should -BeNullOrEmpty
+    }
+
+    It 'leaves CANTIDAD REQUERIDA (CAMBIO) and CAMBIO DE EQUIPO null when only Medium-severity storage findings exist' {
+        # Medium findings (reallocated sectors, elevated temperature, HDD
+        # service-life warning) are monitor-and-watch signals, not a
+        # replacement recommendation — only Critical/High should trigger.
+        $findings = @(
+            [PSCustomObject]@{ Id = 'STO-009'; Category = 'Storage'; Severity = 'Medium'; Title = 'Reallocated sectors detected' }
+        )
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord -StorageFindings $findings)
+
+        $row.'CANTIDAD REQUERIDA (CAMBIO)' | Should -BeNullOrEmpty
+        $row.'CAMBIO DE EQUIPO' | Should -BeNullOrEmpty
+    }
+
+    It 'fills CANTIDAD REQUERIDA (CAMBIO) with 1 and CAMBIO DE EQUIPO with the finding titles when a Critical storage finding exists' {
+        $findings = @(
+            [PSCustomObject]@{ Id = 'STO-006'; Category = 'Storage'; Severity = 'Critical'; Title = 'Storage device failed SMART self-assessment' }
+        )
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord -StorageFindings $findings)
+
+        # Get-StorageSmartSummary aggregates worst-of across every physical
+        # disk, so a finding never identifies which specific disk triggered
+        # it — 1 ("replace the flagged unit") is the honest ceiling of what
+        # this data supports, not an invented per-disk count.
+        $row.'CANTIDAD REQUERIDA (CAMBIO)' | Should -Be 1
+        $row.'CAMBIO DE EQUIPO' | Should -Be 'Storage device failed SMART self-assessment'
+    }
+
+    It 'fills CANTIDAD REQUERIDA (CAMBIO) with 1 and joins titles when a High-severity storage finding exists alongside others' {
+        $findings = @(
+            [PSCustomObject]@{ Id = 'STO-010'; Category = 'Storage'; Severity = 'High'; Title = 'High storage wear level' }
+            [PSCustomObject]@{ Id = 'STO-011'; Category = 'Storage'; Severity = 'Medium'; Title = 'Elevated storage temperature' }
+        )
+        $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord -StorageFindings $findings)
+
+        $row.'CANTIDAD REQUERIDA (CAMBIO)' | Should -Be 1
+        $row.'CAMBIO DE EQUIPO' | Should -Be 'High storage wear level'
     }
 
     It 'leaves IP, MAC, DIRECCION, USUARIO, GHz, TIPO RAM and TIPO DISCO null when the evidence is missing' {

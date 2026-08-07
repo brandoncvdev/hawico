@@ -111,6 +111,51 @@ function Get-InventoryWorkbookCollectedAtDateTime {
     return $parsed.DateTime
 }
 
+function Get-InventoryStorageReplacementAssessment {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Derives an in-memory assessment from existing findings without changing system state.'
+    )]
+    param(
+        [AllowNull()][object[]]$StorageFindings
+    )
+
+    # Only Critical/High-severity storage findings are a genuine "this disk
+    # needs replacing soon" signal (SMART self-assessment FAILED, critical
+    # pending sectors, critically low NVMe spare, high wear level — see
+    # Modules/Get-HealthFindings.ps1 STO-006/007/008/010). Medium findings
+    # (reallocated sectors, elevated temperature, HDD service-life warning)
+    # are monitor-and-watch signals, not a replacement recommendation, and
+    # are intentionally excluded here.
+    $triggeringFindings = @(
+        @($StorageFindings) | Where-Object {
+            $null -ne $_ -and
+            (Get-SafeString $_.Category) -eq 'Storage' -and
+            (Get-SafeString $_.Severity) -in @('Critical', 'High')
+        }
+    )
+
+    if ($triggeringFindings.Count -eq 0) {
+        return [ordered]@{ Count = $null; Reason = $null }
+    }
+
+    # Get-StorageSmartSummary aggregates worst-of across every physical disk
+    # (documented design decision in Get-StorageInfo.ps1), so a finding never
+    # identifies which specific disk triggered it. A flat 1 ("replace the
+    # flagged unit") is the honest ceiling of what this data actually
+    # supports — inventing a precise per-disk count would overclaim
+    # precision the underlying aggregation does not have.
+    $reason = (
+        $triggeringFindings |
+            ForEach-Object { Get-SafeString $_.Title } |
+            Where-Object { $null -ne $_ } |
+            Select-Object -Unique
+    ) -join '; '
+
+    return [ordered]@{ Count = 1; Reason = $reason }
+}
+
 function ConvertTo-InventoryWorkbookRow {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
@@ -159,11 +204,14 @@ function ConvertTo-InventoryWorkbookRow {
         if ($null -ne $sum) { $diskCapacityGB = [math]::Round([double]$sum, 2) }
     }
 
+    $storageReplacement = Get-InventoryStorageReplacementAssessment -StorageFindings $technicalData.StorageFindings
+
     # Column order and headers follow docs/INSTITUTIONAL_EXCEL_MAPPING.md A-Z.
-    # S, V and X are all labeled "CANTIDAD REQUERIDA" in the institutional
-    # template; an object cannot carry three properties with the same name,
-    # so each is disambiguated with a short qualifier while staying
-    # recognizable as the same visible header.
+    # The RAM-assessment columns (S, T, U) and disk-sizing columns (V, W)
+    # were removed: hawico has no memory-upgrade or disk-sizing rule engine,
+    # so those would only ever be null placeholders. CANTIDAD REQUERIDA
+    # (CAMBIO) is disambiguated from the removed "CANTIDAD REQUERIDA"
+    # headers it used to share a name with.
     return [PSCustomObject][ordered]@{
         # Confirmed against the institution's real nuevo_equipos_optimizado.xlsx:
         # REVISADO holds the capture date/time, not a generic review-status
@@ -191,16 +239,12 @@ function ConvertTo-InventoryWorkbookRow {
         'TIPO RAM' = if ($memoryTypes.Count -gt 0) { $memoryTypes -join '/' } else { $null }
         'TIPO DISCO' = if ($diskTypes.Count -gt 0) { $diskTypes -join '/' } else { $null }
         'DISCO (GB)' = $diskCapacityGB
-        # Las 7 columnas de evaluación dependen de reglas de RAM/disco (doc
-        # 09-Memory-Assessment.md) que todavía no existen; se dejan en null
-        # en vez de inventar un valor.
-        'CANTIDAD REQUERIDA (MEMORIA)' = $null
-        'MEMORIA REQUERIDA' = $null
-        'VELOCIDAD' = $null
-        'CANTIDAD REQUERIDA (DISCOS)' = $null
-        'DISCOS SSD REQUERIDA' = $null
-        'CANTIDAD REQUERIDA (CAMBIO)' = $null
-        'CAMBIO DE EQUIPO' = $null
+        # Derived from Critical/High-severity storage findings
+        # (StorageFindings, projected from Get-StorageSmartSummary via
+        # Collector_Hardware_Inventory.ps1) — see
+        # Get-InventoryStorageReplacementAssessment above for the exact rule.
+        'CANTIDAD REQUERIDA (CAMBIO)' = $storageReplacement.Count
+        'CAMBIO DE EQUIPO' = $storageReplacement.Reason
         'S.O' = Get-SafeString $technicalData.OperatingSystem.Caption
     }
 }
