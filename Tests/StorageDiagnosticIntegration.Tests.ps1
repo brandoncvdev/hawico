@@ -27,19 +27,47 @@ Describe 'Storage diagnostic collector integration' -Tag 'Integration' -Skip:(-n
         }
     }
 
-    It 'exercises the already-built graceful-degradation path when Tools\smartctl.exe is absent (PR2, PR7 ships no binary — see Tools/README.md)' {
-        # This is the intended, already-tested fallback behavior (Get-StorageInventory's
-        # single Test-Path pre-check), not a gap: PR7 deliberately ships Tools\ with only
-        # a README explaining what to place there, never a fake/placeholder binary.
+    It 'never crashes and never falsely reports SMARTCTL-NOT-FOUND on a non-NVMe disk when Tools\smartctl.exe is absent (PR2/PR7 ships no binary — see Tools/README.md)' {
+        # This is the intended, already-tested fallback behavior, not a gap:
+        # PR7 deliberately ships Tools\ with only a README, never a fake
+        # binary. IMPORTANT (Real-World Amendment, PR9): this can NOT assert
+        # every disk comes back Supported=$false anymore. WMI
+        # FailurePredictData is now tried FIRST for every non-NVMe bus and
+        # needs no external binary at all — on real hardware where WMI has
+        # data (like the Dell this was validated against), a disk legitimately
+        # comes back Supported=$true even with smartctl completely absent.
+        # SMARTCTL-NOT-FOUND is reachable ONLY on the NVMe branch, which is
+        # unaffected by the WMI amendment and stays fully smartctl-dependent.
         Test-Path -LiteralPath $smartctlPath | Should -BeFalse
 
         $report = Get-Content -LiteralPath $result.JsonPath -Raw | ConvertFrom-Json
         $physicalDisks = @($report.Storage.Physical)
+        $detailedDisks = @($report.Storage.Detailed)
         if ($physicalDisks.Count -gt 0) {
             foreach ($disk in $physicalDisks) {
-                $disk.Smart.Supported | Should -BeFalse
-                $disk.Smart.Source | Should -Be 'Unavailable'
-                $disk.Smart.ErrorCode | Should -Be 'SMARTCTL-NOT-FOUND'
+                # BusType (the field that actually distinguishes NVMe) only
+                # exists on Storage.Detailed[] (Get-PhysicalDisk), not on
+                # Storage.Physical[] (Win32_DiskDrive) — correlate by
+                # SerialNumber the same way Get-StorageInventory itself does.
+                $matchingDetailed = $detailedDisks | Where-Object { $_.SerialNumber -eq $disk.SerialNumber } | Select-Object -First 1
+                $isNvme = $null -ne $matchingDetailed -and $matchingDetailed.BusType -eq 'NVMe'
+
+                $disk.Smart.Supported | Should -BeOfType [bool]
+                if ($disk.Smart.Supported) {
+                    $disk.Smart.Source | Should -BeIn @('ATA', 'NVMe')
+                }
+                else {
+                    $disk.Smart.Source | Should -Be 'Unavailable'
+                    if ($isNvme) {
+                        $disk.Smart.ErrorCode | Should -Be 'SMARTCTL-NOT-FOUND'
+                    }
+                    else {
+                        # Non-NVMe: WMI was tried first and had nothing —
+                        # never the smartctl-specific error, since smartctl
+                        # is never even reached in this case.
+                        $disk.Smart.ErrorCode | Should -Match '^WMI-'
+                    }
+                }
             }
         }
     }
