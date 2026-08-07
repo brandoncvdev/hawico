@@ -1,4 +1,32 @@
-﻿function Get-NetworkInventory {
+﻿function Get-InventoryNetRouteNextHop {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads a route property defensively without changing system state.'
+    )]
+    param(
+        [AllowNull()]$Route
+    )
+
+    # On older Windows (confirmed: real machines in the field), a NIC with no
+    # default gateway configured — or an older NetTCPIP module build whose
+    # MSFT_NetRoute-shaped object differs — can hand back a gateway entry
+    # that either is $null or genuinely lacks a NextHop property at all.
+    # Under this project's Set-StrictMode, accessing .NextHop directly on
+    # that throws "property 'NextHop' cannot be found on this object" and,
+    # since the whole adapter loop shares one try/catch, wipes out every
+    # adapter's data for the run, not just the gateway field — confirmed by
+    # a real user report ("no me da datos de la tarjeta de red").
+    if ($null -eq $Route) {
+        return $null
+    }
+    if ($Route.PSObject.Properties.Name -notcontains 'NextHop') {
+        return $null
+    }
+    return Get-SafeString $Route.NextHop
+}
+
+function Get-NetworkInventory {
     param(
         [bool]$IncludeIPv6 = $true,
         [bool]$IncludeDisconnectedAdapters = $false
@@ -37,9 +65,9 @@
                         LinkSpeed      = Get-SafeString $cfg.NetAdapter.LinkSpeed
                         IPv4Addresses  = $ipv4
                         IPv6Addresses  = $ipv6
-                        IPv4Gateways   = @($cfg.IPv4DefaultGateway | ForEach-Object { $_.NextHop } | Where-Object { $_ })
+                        IPv4Gateways   = @($cfg.IPv4DefaultGateway | ForEach-Object { Get-InventoryNetRouteNextHop -Route $_ } | Where-Object { $_ })
                         IPv6Gateways   = if ($IncludeIPv6) {
-                            ,@($cfg.IPv6DefaultGateway | ForEach-Object { $_.NextHop } | Where-Object { $_ })
+                            ,@($cfg.IPv6DefaultGateway | ForEach-Object { Get-InventoryNetRouteNextHop -Route $_ } | Where-Object { $_ })
                         } else { ,@() }
                         DNSServers     = @($cfg.DNSServer | ForEach-Object { $_.ServerAddresses } | Where-Object { $_ })
                     }
