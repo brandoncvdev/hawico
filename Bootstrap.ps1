@@ -1,15 +1,18 @@
 ﻿$ErrorActionPreference = "Stop"
 
-$basePath = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptPath = $MyInvocation.MyCommand.Path
+$basePath = Split-Path -Parent $scriptPath
 $logsPath = Join-Path $basePath "Logs"
 $startupLog = Join-Path $logsPath "startup-error.txt"
 $menuScript = Join-Path $basePath "Start-Inventory.ps1"
 
 New-Item -ItemType Directory -Force -Path $logsPath | Out-Null
+Set-Location -LiteralPath $basePath
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+
     return $principal.IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator
     )
@@ -22,24 +25,24 @@ try {
         Write-Host "Acepte la ventana de Control de cuentas de usuario." -ForegroundColor Yellow
         Write-Host ""
 
-        $arguments = @(
+        $argumentList = @(
             "-NoLogo"
             "-NoProfile"
             "-ExecutionPolicy"
             "Bypass"
             "-NoExit"
             "-File"
-            ('"{0}"' -f $MyInvocation.MyCommand.Path)
+            "`"$scriptPath`""
         )
 
         Start-Process `
             -FilePath "powershell.exe" `
-            -ArgumentList ($arguments -join " ") `
+            -ArgumentList $argumentList `
             -WorkingDirectory $basePath `
             -Verb RunAs
 
-        Write-Host "La ventana con permisos se abrió por separado."
-        Write-Host "Esta ventana puede cerrarse."
+        Write-Host "Se abrió una nueva consola con permisos de administrador."
+        Write-Host "Puede cerrar esta ventana inicial."
         return
     }
 
@@ -68,6 +71,7 @@ Línea: $($_.InvocationInfo.ScriptLineNumber)
 Comando: $($_.InvocationInfo.Line)
 PowerShell: $($PSVersionTable.PSVersion)
 Ruta base: $basePath
+Ruta Bootstrap: $scriptPath
 
 Error completo:
 $($_ | Out-String)

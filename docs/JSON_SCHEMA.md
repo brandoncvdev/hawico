@@ -1,8 +1,33 @@
 # JSON Schema
 
-Collection Computer OperatingSystem BIOS Motherboard Processors Memory
-Storage GraphicsAdapters NetworkAdapters Security Expansion
-DevicesWithErrors StorageFindings StorageRecommendations
+Schema version: `2.1`
+
+Top-level areas:
+
+- `Collection`
+- `Computer`
+- `OperatingSystem`
+- `BIOS`
+- `Motherboard`
+- `Processors`
+- `Memory`
+- `Storage`
+- `GraphicsAdapters`
+- `NetworkAdapters`
+- `Security`
+- `Expansion`
+- `Peripherals`
+- `DevicesWithErrors`
+- `StorageFindings`
+- `StorageRecommendations`
+
+`Peripherals` contains:
+
+- `CollectionMethod`: primary Windows source used by the collector.
+- `Devices`: connected devices grouped in the HTML by `Category`.
+- `Summary`: totals for categories, external devices, USB, Bluetooth and devices with problems.
+
+Each peripheral includes its friendly name, manufacturer, PnP class, inferred connection type, status, problem code, backing service and instance identifier when Windows exposes them.
 
 La extensión de diagnóstico de Windows conserva `SchemaVersion 2.0` y agrega:
 
