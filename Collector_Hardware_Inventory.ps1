@@ -1,7 +1,15 @@
 ﻿[CmdletBinding()]
 param(
     [ValidateSet("Quick","Full")]
-    [string]$Mode = "Full"
+    [string]$Mode = "Full",
+    [string]$SessionId = "SES-UNASSIGNED",
+    [AllowNull()][string]$Technician = $null,
+    [AllowNull()][string[]]$ManualFieldKeys = $null,
+    [AllowNull()][object[]]$OrganizationUnits = $null,
+    [AllowNull()][object[]]$DepartmentUnits = $null,
+    [AllowNull()][hashtable]$PresetManualFieldValues = $null,
+    [AllowNull()][hashtable]$DefaultManualFieldValues = $null,
+    [AllowNull()][hashtable]$FieldLabels = $null
 )
 
 Set-StrictMode -Version Latest
@@ -18,6 +26,8 @@ $config = Get-Content $configPath -Raw | ConvertFrom-Json
 
 $moduleFiles = @(
     "Common.ps1",
+    "New-InventoryCollectionRecord.ps1",
+    "New-InventoryManualCapture.ps1",
     "Get-ComputerInfo.ps1",
     "Get-ProcessorInfo.ps1",
     "Get-MemoryInfo.ps1",
@@ -27,6 +37,16 @@ $moduleFiles = @(
     "Get-UpgradeInfo.ps1",
     "Get-SecurityInfo.ps1",
     "Get-DeviceErrors.ps1",
+    # Storage-only findings for the full inventory report (Phase 8,
+    # storage-diagnostics): reuses the same STO-006..012 analysis engine
+    # already wired into Collector_Storage_Diagnostic.ps1 — no new engine,
+    # only these four additional modules plus the Invoke-HealthCheck
+    # pipeline call below.
+    "Get-HealthConfig.ps1",
+    "Get-StorageHealth.ps1",
+    "Get-HealthFindings.ps1",
+    "New-HealthCheckReport.ps1",
+    "Invoke-HealthCheck.ps1",
     "Get-PeripheralInfo.ps1",
     "Export.ps1"
 )
@@ -43,11 +63,28 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
-$jsonPath = Join-Path $outputDir "$hostname-$timestamp.json"
-$htmlPath = Join-Path $outputDir "$hostname-$timestamp.html"
+
+# Every artifact for this computer lands under its own subfolder instead of
+# flat in OutputDirectory, grouping one machine's whole history together
+# (Modules\Common.ps1's Get-InventoryHostOutputDirectory). Record-discovery
+# for Excel consolidation and administration import already scans
+# recursively (Get-InventoryConsolidatedRecords -Recurse), so this does not
+# break either of those; only Start-Inventory.ps1's "abrir último
+# reporte"/"diagnóstico" menu options needed -Recurse added for the same reason.
+$hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostname
+New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
+
+$jsonPath = Join-Path $hostOutputDir "$hostname-$timestamp.json"
+$recordJsonPath = Join-Path $hostOutputDir "$hostname-$timestamp-record.json"
+$htmlPath = Join-Path $hostOutputDir "$hostname-$timestamp.html"
 $logPath = Join-Path $logDir "$hostname-$timestamp.log"
 
-try { Start-Transcript -Path $logPath -Force | Out-Null } catch {}
+try {
+    Start-Transcript -Path $logPath -Force | Out-Null
+}
+catch {
+    Write-Verbose ("No se pudo iniciar la transcripción: {0}" -f $_.Exception.Message)
+}
 
 try {
     Write-Host ""
@@ -104,12 +141,63 @@ try {
         }
     }
 
+    # Storage-only findings + raw SMART state for the full inventory report
+    # (Phase 8, storage-diagnostics): mirrors Collector_Storage_Diagnostic.ps1's
+    # empty-but-well-formed Performance/Events pattern so Invoke-HealthCheck
+    # (reused unmodified) only evaluates Storage — no new analysis engine, only
+    # this wiring plus the corresponding "Estado SMART"/findings section added
+    # to New-InventoryHtml (Modules/Export.ps1). Capabilities is stubbed the
+    # same way Get-HealthCapability's own DefaultData would be
+    # (IsAdministrator=$false, Items=@()) rather than dot-sourcing
+    # Get-HealthCapabilities.ps1/Invoke-HealthCollectorSection.ps1 — the
+    # STO-006..012 rules evaluated here never read Capabilities, only
+    # Metrics.Storage.Smart and the Storage* config thresholds, so that extra
+    # dependency would add nothing besides risk. A failure anywhere in this
+    # block is non-critical to the rest of the inventory and degrades to
+    # empty findings/recommendations instead of aborting the collector.
+    $storageFindings = @()
+    $storageRecommendations = @()
+    try {
+        $healthConfig = Get-HealthCheckConfig -Config $config
+        $storageHealthResult = Get-StorageHealth -StorageInventory $storage -SystemDrive $env:SystemDrive
+        $healthInputData = [ordered]@{
+            BaseInventory = [ordered]@{
+                Computer = $computerInfo.Computer
+                OperatingSystem = $computerInfo.OperatingSystem
+                BIOS = $computerInfo.BIOS
+                Motherboard = $computerInfo.Motherboard
+                Processors = @($processors)
+                Memory = $memory
+                Storage = $storage
+            }
+            Capabilities = [ordered]@{ IsAdministrator = $false; Items = @() }
+            HealthConfig = $healthConfig
+            Performance = [ordered]@{ Status = "Skipped"; ValidSampleCount = 0; CPU = @{}; Memory = @{} }
+            Storage = $storageHealthResult
+            Events = @()
+            EventStatus = "Skipped"
+            EventErrors = @()
+            ExtendedDiagnostics = [ordered]@{ ContractVersion = "1.0" }
+            Sections = @()
+            Sample = [ordered]@{ RequestedDurationSeconds = $null; ActualDurationSeconds = $null; IntervalSeconds = $null; ValidSampleCount = 0 }
+        }
+        $storageHealthCheck = Invoke-HealthCheck -InputData $healthInputData -CollectedAt ([datetimeoffset]::Now) -DurationMilliseconds 0
+        $storageFindings = @($storageHealthCheck.HealthCheck.Findings)
+        $storageRecommendations = @($storageHealthCheck.HealthCheck.Recommendations)
+    }
+    catch {
+        Write-Verbose ("No se pudo evaluar la salud del almacenamiento: {0}" -f $_.Exception.Message)
+    }
+
+    $collectedAt = [datetimeoffset]::Now
+    $scriptUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+
     $inventory = [ordered]@{
         SchemaVersion = "2.1"
         Collection = [ordered]@{
-            CollectedAt = (Get-Date).ToString("o")
+            CollectedAt = $collectedAt.ToString("o")
             Mode = $Mode
-            ScriptUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+            ScriptUser = $scriptUser
         }
         Computer = $computerInfo.Computer
         OperatingSystem = $computerInfo.OperatingSystem
@@ -124,14 +212,64 @@ try {
         Security = $security
         Peripherals = $peripherals
         DevicesWithErrors = $deviceErrors
+        StorageFindings = $storageFindings
+        StorageRecommendations = $storageRecommendations
     }
+
+    # The launcher resolves the active organization profile's manual fields
+    # and passes them in as -ManualFieldKeys. Direct standalone invocation
+    # (no launcher involved) still works: it falls back to config.json's
+    # flat ManualFields list, exactly as before organization packages
+    # existed. The fallback/array-shape logic lives in
+    # Resolve-InventoryManualFieldKeys / Resolve-InventoryOrganizationUnits
+    # (Modules/Common.ps1) instead of inline here, so it can be covered by a
+    # real runtime test (array vs. bare scalar) instead of only the text
+    # contract test this script itself gets.
+    $configManualFields = $null
+    if ($config.PSObject.Properties.Name -contains "ManualFields") {
+        $configManualFields = $config.ManualFields
+    }
+    $resolvedManualFieldKeys = Resolve-InventoryManualFieldKeys -PassedKeys $ManualFieldKeys -ConfigManualFields $configManualFields
+
+    $resolvedOrganizationUnits = Resolve-InventoryOrganizationUnits -PassedUnits $OrganizationUnits
+
+    # Resolve-InventoryOrganizationUnits is a generic array-shape resolver
+    # (fallback-to-empty-array plus the same comma-guard), not specific to
+    # any one catalog — reused here for the independent, flat department
+    # catalog (doc07-Catalog-System.md) instead of a near-duplicate function.
+    $resolvedDepartmentUnits = Resolve-InventoryOrganizationUnits -PassedUnits $DepartmentUnits
+
+    # else { @() } would collapse to $null when this branch is taken (no
+    # manual fields configured at all) — same if-expression-assignment
+    # hazard as the fix above, found via a full-repo sweep for this exact
+    # pattern after the collector broke for real on Windows PowerShell 5.1.
+    $manualFields = if ($resolvedManualFieldKeys.Count -gt 0) {
+        Read-InventoryManualCapture -FieldKeys $resolvedManualFieldKeys -Technician $Technician `
+            -OrganizationUnits $resolvedOrganizationUnits -DepartmentUnits $resolvedDepartmentUnits `
+            -PresetValues $PresetManualFieldValues -DefaultValues $DefaultManualFieldValues -FieldLabels $FieldLabels
+    }
+    else {
+        ,@()
+    }
+
+    $collectorVersion = Get-CollectorVersion -BasePath $basePath
+
+    $collectionRecord = New-InventoryCollectionRecord `
+        -Inventory $inventory `
+        -SessionId $SessionId `
+        -CollectorVersion $collectorVersion `
+        -CollectedAt $collectedAt `
+        -ManualFields $manualFields
 
     if ([bool]$config.GenerateJSON) {
         $inventory | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
+        $collectionRecord | ConvertTo-Json -Depth 16 | Set-Content `
+            -LiteralPath $recordJsonPath `
+            -Encoding UTF8
     }
 
     if ([bool]$config.GenerateHTML) {
-        New-InventoryHtml -Inventory $inventory -Path $htmlPath
+        New-InventoryHtml -Inventory $inventory -Path $htmlPath -ManualFields $manualFields
     }
 
     Write-Progress -Activity "Inventario de hardware" -Completed
@@ -144,6 +282,7 @@ try {
     Write-Host "Equipo: $env:COMPUTERNAME"
     Write-Host "Modo: $Mode"
     if ([bool]$config.GenerateJSON) { Write-Host "JSON: $jsonPath" }
+    if ([bool]$config.GenerateJSON) { Write-Host "Registro importable: $recordJsonPath" }
     if ([bool]$config.GenerateHTML) { Write-Host "HTML: $htmlPath" }
     Write-Host "LOG: $logPath"
     Write-Host ""
@@ -152,6 +291,7 @@ try {
         Success = $true
         OutputDirectory = $outputDir
         JsonPath = $jsonPath
+        RecordJsonPath = $recordJsonPath
         HtmlPath = $htmlPath
         LogPath = $logPath
     }
@@ -179,5 +319,10 @@ catch {
     }
 }
 finally {
-    try { Stop-Transcript | Out-Null } catch {}
+    try {
+        Stop-Transcript | Out-Null
+    }
+    catch {
+        Write-Verbose ("No se pudo detener la transcripción: {0}" -f $_.Exception.Message)
+    }
 }

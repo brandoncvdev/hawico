@@ -1,0 +1,17 @@
+{
+  "profileId": "basic-inventory",
+  "name": "Inventario básico",
+  "manualFields": [
+    "assignment.user.fullName",
+    "assignment.organizationUnitId",
+    "assignment.departmentUnitId",
+    "collection.observations"
+  ],
+  "exports": {
+    "json": true,
+    "html": true,
+    "xlsx": true,
+    "log": true
+  },
+  "interactionMode": "compact"
+}

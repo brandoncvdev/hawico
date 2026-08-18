@@ -1,0 +1,429 @@
+﻿BeforeAll {
+    . "$PSScriptRoot/../Modules/Common.ps1"
+    . "$PSScriptRoot/../Modules/InventoryOrganizationPackage.ps1"
+
+    function New-FixtureOrganizationPackage {
+        param(
+            [Parameter(Mandatory)][string]$BasePath,
+            [string]$OrganizationId = 'org-fixture',
+            [string]$ProfileId = 'basic-inventory',
+            [string[]]$ManualFields = @('assignment.user.fullName', 'asset.assetTag'),
+            [switch]$IncludeCatalog,
+            [switch]$IncludeCustomFields,
+            [switch]$IncludeDepartmentCatalog
+        )
+
+        $orgDir = Join-Path $BasePath $OrganizationId
+        $profilesDir = Join-Path $orgDir 'profiles'
+        New-Item -ItemType Directory -Force -Path $profilesDir | Out-Null
+
+        $organization = [ordered]@{
+            schemaVersion = '1.0'
+            packageVersion = '0.1.0'
+            organizationId = $OrganizationId
+            name = 'Organización de prueba'
+            defaultProfileId = $ProfileId
+            organizationUnitLabels = @('Sede', 'Dirección', 'Departamento', 'Área')
+            updatedAt = ([datetimeoffset]::Now).ToString('o')
+        }
+        $organization | ConvertTo-Json -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $orgDir 'organization.json') -Encoding UTF8
+
+        $profileDefinition = [ordered]@{
+            profileId = $ProfileId
+            name = 'Perfil de prueba'
+            manualFields = @($ManualFields)
+            exports = [ordered]@{ json = $true; html = $true; xlsx = $true; log = $true }
+            interactionMode = 'compact'
+        }
+        $profileDefinition | ConvertTo-Json -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $profilesDir "$ProfileId.json") -Encoding UTF8
+
+        if ($IncludeCatalog) {
+            $catalogsDir = Join-Path $orgDir 'catalogs'
+            New-Item -ItemType Directory -Force -Path $catalogsDir | Out-Null
+            $catalog = [ordered]@{
+                units = @(
+                    [ordered]@{ id = 'site-center'; name = 'Sede Centro'; type = 'site'; parentId = $null; sortOrder = 10 }
+                    [ordered]@{ id = 'dir-admin'; name = 'Dirección Administrativa'; type = 'direction'; parentId = 'site-center'; sortOrder = 20 }
+                )
+            }
+            $catalog | ConvertTo-Json -Depth 6 |
+                Set-Content -LiteralPath (Join-Path $catalogsDir 'organization-units.json') -Encoding UTF8
+        }
+
+        if ($IncludeDepartmentCatalog) {
+            $catalogsDir = Join-Path $orgDir 'catalogs'
+            New-Item -ItemType Directory -Force -Path $catalogsDir | Out-Null
+            $departmentCatalog = [ordered]@{
+                units = @(
+                    [ordered]@{ id = 'dept-finance'; name = 'Finanzas'; type = 'department'; parentId = $null; sortOrder = 10 }
+                )
+            }
+            $departmentCatalog | ConvertTo-Json -Depth 6 |
+                Set-Content -LiteralPath (Join-Path $catalogsDir 'departments.json') -Encoding UTF8
+        }
+
+        if ($IncludeCustomFields) {
+            $customFields = [ordered]@{
+                fields = @(
+                    [ordered]@{
+                        key = 'assignment.user.fullName'
+                        label = 'Nombre completo del usuario'
+                        type = 'text'
+                        required = $false
+                        allowSkip = $true
+                        askDuringCollection = $true
+                        reusePreviousValue = $true
+                    }
+                )
+            }
+            $customFields | ConvertTo-Json -Depth 6 |
+                Set-Content -LiteralPath (Join-Path $orgDir 'custom-fields.json') -Encoding UTF8
+        }
+
+        return $orgDir
+    }
+}
+
+Describe 'Get-InventoryOrganizationPackagePath' {
+    It 'builds every path under BasePath/OrganizationId' {
+        $basePath = Join-Path $TestDrive 'orgs'
+
+        $paths = Get-InventoryOrganizationPackagePath -BasePath $basePath -OrganizationId 'org-example'
+
+        $paths.OrganizationDirectory | Should -Be (Join-Path $basePath 'org-example')
+        $paths.OrganizationFile | Should -Be (Join-Path (Join-Path $basePath 'org-example') 'organization.json')
+        $paths.ProfilesDirectory | Should -Be (Join-Path (Join-Path $basePath 'org-example') 'profiles')
+        $paths.CatalogsDirectory | Should -Be (Join-Path (Join-Path $basePath 'org-example') 'catalogs')
+        $paths.CustomFieldsFile | Should -Be (Join-Path (Join-Path $basePath 'org-example') 'custom-fields.json')
+    }
+}
+
+Describe 'Get-InventoryOrganizationDefinition' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns null without throwing when the organization does not exist' {
+        { $script:result = Get-InventoryOrganizationDefinition -BasePath $script:orgsRoot -OrganizationId 'does-not-exist' } |
+            Should -Not -Throw
+        $script:result | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when OrganizationId is null or empty' {
+        Get-InventoryOrganizationDefinition -BasePath $script:orgsRoot -OrganizationId $null | Should -BeNullOrEmpty
+        Get-InventoryOrganizationDefinition -BasePath $script:orgsRoot -OrganizationId '' | Should -BeNullOrEmpty
+    }
+
+    It 'returns the parsed organization definition when it exists' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' | Out-Null
+
+        $definition = Get-InventoryOrganizationDefinition -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $definition.organizationId | Should -Be 'org-fixture'
+        $definition.schemaVersion | Should -Be '1.0'
+        $definition.defaultProfileId | Should -Be 'basic-inventory'
+    }
+}
+
+Describe 'Get-InventoryProfileDefinition' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns null without throwing when the profile does not exist' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' | Out-Null
+
+        { $script:result = Get-InventoryProfileDefinition -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'does-not-exist' } |
+            Should -Not -Throw
+        $script:result | Should -BeNullOrEmpty
+    }
+
+    It 'returns the parsed profile definition when it exists' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'basic-inventory' `
+            -ManualFields @('assignment.user.fullName', 'asset.assetTag') | Out-Null
+
+        $definition = Get-InventoryProfileDefinition -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'basic-inventory'
+
+        $definition.profileId | Should -Be 'basic-inventory'
+        @($definition.manualFields) | Should -Be @('assignment.user.fullName', 'asset.assetTag')
+        $definition.interactionMode | Should -Be 'compact'
+    }
+}
+
+Describe 'Get-InventoryProfileManualFields' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+        $script:fallback = @('fallback.field.one', 'fallback.field.two')
+    }
+
+    It 'falls back when OrganizationId is null or empty' {
+        $resultNull = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId $null `
+            -ProfileId 'basic-inventory' -FallbackFields $script:fallback
+        $resultEmpty = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId '' `
+            -ProfileId 'basic-inventory' -FallbackFields $script:fallback
+
+        @($resultNull) | Should -Be $script:fallback
+        @($resultEmpty) | Should -Be $script:fallback
+    }
+
+    It 'falls back when the organization does not exist' {
+        $result = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId 'does-not-exist' `
+            -ProfileId 'basic-inventory' -FallbackFields $script:fallback
+
+        @($result) | Should -Be $script:fallback
+    }
+
+    It 'falls back when the organization exists but the profile does not' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'basic-inventory' | Out-Null
+
+        $result = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId 'org-fixture' `
+            -ProfileId 'audit-completa' -FallbackFields $script:fallback
+
+        @($result) | Should -Be $script:fallback
+    }
+
+    It 'uses the profile manual fields instead of the fallback when the profile exists' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'basic-inventory' `
+            -ManualFields @('assignment.user.fullName', 'assignment.organizationUnitId') | Out-Null
+
+        $result = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId 'org-fixture' `
+            -ProfileId 'basic-inventory' -FallbackFields $script:fallback
+
+        @($result) | Should -Be @('assignment.user.fullName', 'assignment.organizationUnitId')
+    }
+
+    It 'returns an array even when the profile has exactly one manual field (single-element array bug)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -ProfileId 'basic-inventory' `
+            -ManualFields @('assignment.user.fullName') | Out-Null
+
+        $result = Get-InventoryProfileManualFields -BasePath $script:orgsRoot -OrganizationId 'org-fixture' `
+            -ProfileId 'basic-inventory' -FallbackFields $script:fallback
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0] | Should -Be 'assignment.user.fullName'
+    }
+}
+
+Describe 'Get-InventoryOrganizationUnitCatalog' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns an empty array when there is no organization package' {
+        $result = Get-InventoryOrganizationUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'does-not-exist'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns an empty array when the organization exists but has no catalog file' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' | Out-Null
+
+        $result = Get-InventoryOrganizationUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        @($result).Count | Should -Be 0
+    }
+
+    It 'returns the parsed units array when the catalog exists' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -IncludeCatalog | Out-Null
+
+        $result = Get-InventoryOrganizationUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        @($result).Count | Should -Be 2
+        $result[0].id | Should -Be 'site-center'
+        $result[1].parentId | Should -Be 'site-center'
+    }
+}
+
+Describe 'Get-InventoryDepartmentUnitCatalog' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns an empty array when there is no organization package' {
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'does-not-exist'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns an empty array when the organization exists but has no departments.json' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' | Out-Null
+
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns an array even when departments.json has exactly one unit (single-element array bug)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -IncludeDepartmentCatalog | Out-Null
+
+        $result = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0].id | Should -Be 'dept-finance'
+    }
+
+    It 'does not confuse departments.json with organization-units.json (independent, flat catalogs)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' `
+            -IncludeCatalog -IncludeDepartmentCatalog | Out-Null
+
+        $directions = Get-InventoryOrganizationUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+        $departments = Get-InventoryDepartmentUnitCatalog -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        @($directions).Count | Should -Be 2
+        @($departments).Count | Should -Be 1
+        $departments[0].id | Should -Be 'dept-finance'
+    }
+}
+
+Describe 'The real Config/Organizations/institucion-principal package (local-only, gitignored real institutional data)' {
+    # institucion-principal/ is real data, gitignored, never committed —
+    # this Describe only runs meaningfully on a machine that happens to have
+    # it locally (like the one this catalog was built on); it's a no-op
+    # skip elsewhere. Architecture switched from independent flat catalogs
+    # to a real Dirección->Subdirección cascade (2026-08-07, user-confirmed
+    # after a real usability bug: mixing levels in one flat file let a
+    # technician pick a Departamento by mistake at the Dirección prompt) —
+    # departments.json was moved aside (departments.json.bak-flat-mode) so
+    # Get-InventoryDepartmentUnitCatalog correctly returns empty and the
+    # cascade in organization-units.json takes over.
+    BeforeAll {
+        # Pester v5 discovery-vs-run scoping: a plain assignment directly in
+        # the Describe body only exists during discovery, not when the It
+        # block actually runs — must be set in BeforeAll (same pattern as
+        # every other Describe in this file) for use INSIDE the It body.
+        $script:repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+    }
+
+    # -Skip is a test-tree/discovery-time parameter (unlike the It body,
+    # which runs later) — it needs a self-contained expression here, not a
+    # BeforeAll-scoped variable that does not exist yet at discovery time.
+    It 'exposes a real Dirección->Subdirección cascade, not an independent flat Departamento catalog' -Skip:(-not (Test-Path -LiteralPath (Join-Path (Resolve-Path "$PSScriptRoot/../Config/Organizations") 'institucion-principal'))) {
+        $directions = Get-InventoryOrganizationUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
+        $departments = Get-InventoryDepartmentUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'institucion-principal'
+
+        @($directions).Count | Should -BeGreaterThan 0
+        @($departments).Count | Should -Be 0
+        @($directions | Where-Object { $null -eq $_.parentId }).Count | Should -BeGreaterThan 0
+        @($directions | Where-Object { $null -ne $_.parentId }).Count | Should -BeGreaterThan 0
+    }
+}
+
+Describe 'Get-InventoryCustomFieldDefinitions' {
+    BeforeEach {
+        $script:orgsRoot = Join-Path $TestDrive ('orgs-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $script:orgsRoot | Out-Null
+    }
+
+    It 'returns an empty array when there is no organization package' {
+        $result = Get-InventoryCustomFieldDefinitions -BasePath $script:orgsRoot -OrganizationId 'does-not-exist'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns the parsed fields array when custom-fields.json exists (single-element array bug)' {
+        New-FixtureOrganizationPackage -BasePath $script:orgsRoot -OrganizationId 'org-fixture' -IncludeCustomFields | Out-Null
+
+        $result = Get-InventoryCustomFieldDefinitions -BasePath $script:orgsRoot -OrganizationId 'org-fixture'
+
+        $result.GetType().IsArray | Should -BeTrue
+        $result.Count | Should -Be 1
+        $result[0].key | Should -Be 'assignment.user.fullName'
+    }
+}
+
+Describe 'The real Config/Organizations/org-example package shipped in this repo' {
+    It 'resolves the same 4 manual fields already configured as the config.json fallback' {
+        $repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+
+        $result = Get-InventoryProfileManualFields -BasePath $repoOrganizationsRoot -OrganizationId 'org-example' `
+            -ProfileId 'basic-inventory' -FallbackFields @('should-not-be-used')
+
+        @($result) | Should -Be @(
+            'assignment.user.fullName',
+            'assignment.organizationUnitId',
+            'assignment.departmentUnitId',
+            'collection.observations'
+        )
+    }
+
+    It 'exposes a loadable organization-units catalog and custom-fields definitions' {
+        $repoOrganizationsRoot = Resolve-Path "$PSScriptRoot/../Config/Organizations"
+
+        $units = Get-InventoryOrganizationUnitCatalog -BasePath $repoOrganizationsRoot -OrganizationId 'org-example'
+        $customFields = Get-InventoryCustomFieldDefinitions -BasePath $repoOrganizationsRoot -OrganizationId 'org-example'
+
+        @($units).Count | Should -BeGreaterThan 0
+        @($customFields).Count | Should -BeGreaterThan 0
+    }
+}
+
+Describe 'Get-InventoryAutoDetectedOrganizationId' {
+    It 'returns null when the base path does not exist yet' {
+        $missingPath = Join-Path $TestDrive 'does-not-exist'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $missingPath
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when there are no organization folders at all' {
+        $emptyBase = Join-Path $TestDrive 'empty-base'
+        New-Item -ItemType Directory -Force -Path $emptyBase | Out-Null
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $emptyBase
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'ignores org-example and returns null when it is the only folder present' {
+        $base = Join-Path $TestDrive 'only-example'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'org-example'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'auto-detects the single real organization folder, ignoring org-example alongside it' {
+        $base = Join-Path $TestDrive 'one-real-org'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'org-example'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'mi-institucion'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -Be 'mi-institucion'
+    }
+
+    It 'returns null (ambiguous) when there is more than one real organization folder' {
+        $base = Join-Path $TestDrive 'two-real-orgs'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'institucion-a'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'institucion-b'
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -BeNullOrEmpty
+    }
+
+    It 'ignores a folder that has no organization.json (not a real package)' {
+        $base = Join-Path $TestDrive 'stray-folder'
+        New-FixtureOrganizationPackage -BasePath $base -OrganizationId 'mi-institucion'
+        New-Item -ItemType Directory -Force -Path (Join-Path $base 'not-a-package') | Out-Null
+
+        $result = Get-InventoryAutoDetectedOrganizationId -BasePath $base
+
+        $result | Should -Be 'mi-institucion'
+    }
+}

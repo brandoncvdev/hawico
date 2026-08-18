@@ -1,0 +1,7 @@
+{
+  "units": [
+    {"id": "site-center", "name": "Sede Centro", "type": "site", "parentId": null, "sortOrder": 10},
+    {"id": "dir-admin", "name": "Dirección Administrativa", "type": "direction", "parentId": "site-center", "sortOrder": 20},
+    {"id": "dept-hr", "name": "Recursos Humanos", "type": "department", "parentId": "dir-admin", "sortOrder": 30}
+  ]
+}

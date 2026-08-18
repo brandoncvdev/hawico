@@ -1,0 +1,16 @@
+# Real institutional data — organization structure, never sample/demo data.
+# Config/Organizations/org-example/ stays tracked on purpose (it's the
+# reference format, not real data). Add other real per-institution folders
+# here the same way if this repo is ever shared across institutions.
+Config/Organizations/institucion-principal/
+Config/Organizations/capcee/
+
+# Pester CI run artifact, not project output.
+testResults.xml
+
+# macOS Finder metadata.
+.DS_Store
+
+# Third-party portable binary (smartmontools, GPLv2) — never bundled in git,
+# see Tools/README.md for what to place here and why.
+Tools/smartctl.exe

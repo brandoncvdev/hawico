@@ -1,4 +1,32 @@
-﻿function Get-NetworkAdapterType {
+﻿function Get-InventoryNetRouteNextHop {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads a route property defensively without changing system state.'
+    )]
+    param(
+        [AllowNull()]$Route
+    )
+
+    # On older Windows (confirmed: real machines in the field), a NIC with no
+    # default gateway configured — or an older NetTCPIP module build whose
+    # MSFT_NetRoute-shaped object differs — can hand back a gateway entry
+    # that either is $null or genuinely lacks a NextHop property at all.
+    # Under this project's Set-StrictMode, accessing .NextHop directly on
+    # that throws "property 'NextHop' cannot be found on this object" and,
+    # since the whole adapter loop shares one try/catch, wipes out every
+    # adapter's data for the run, not just the gateway field — confirmed by
+    # a real user report ("no me da datos de la tarjeta de red").
+    if ($null -eq $Route) {
+        return $null
+    }
+    if ($Route.PSObject.Properties.Name -notcontains 'NextHop') {
+        return $null
+    }
+    return Get-SafeString $Route.NextHop
+}
+
+function Get-NetworkAdapterType {
     param(
         [AllowNull()][object]$Adapter
     )
@@ -35,9 +63,22 @@ function Get-NetworkPropertyValues {
         }
 
         foreach ($value in @($property.Value)) {
-            if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace($value.ToString())) {
-                $values += $value
+            if ($null -eq $value) {
+                continue
             }
+            # This helper flattens both scalar leaf values (e.g. DNS server
+            # strings) and intermediate CIM/PSCustomObject values (e.g. the
+            # IPv4Address/IPv4DefaultGateway objects on a NetIPConfiguration
+            # result). A blanket `$value.ToString()` emptiness check — as
+            # originally written — silently drops every non-string object,
+            # because PSCustomObject.ToString() returns "" by default; that
+            # made every address/gateway/DNS lookup in Get-NetworkInventory
+            # come back empty. Only apply the blank-string filter to actual
+            # strings; let any other value through as long as it isn't null.
+            if ($value -is [string] -and [string]::IsNullOrWhiteSpace($value)) {
+                continue
+            }
+            $values += $value
         }
     }
 
@@ -109,12 +150,15 @@ function Get-NetworkInventory {
                             $ipv6AddressObjects = @(Get-NetworkPropertyValues -InputObject $cfg -PropertyName 'IPv6Address')
                             $ipv6GatewayObjects = @(Get-NetworkPropertyValues -InputObject $cfg -PropertyName 'IPv6DefaultGateway')
                             $ipv6 = @(Get-NetworkPropertyValues -InputObject $ipv6AddressObjects -PropertyName 'IPAddress')
-                            $ipv6Gateways = @(Get-NetworkPropertyValues -InputObject $ipv6GatewayObjects -PropertyName 'NextHop')
+                            # NextHop is read through the dedicated defensive helper (not the
+                            # generic property reader) so the real-world fix stays traceable:
+                            # some gateway route objects genuinely lack a NextHop property.
+                            $ipv6Gateways = @($ipv6GatewayObjects | ForEach-Object { Get-InventoryNetRouteNextHop -Route $_ } | Where-Object { $_ })
                         }
 
                         $ipv4GatewayObjects = @(Get-NetworkPropertyValues -InputObject $cfg -PropertyName 'IPv4DefaultGateway')
                         $dnsServerObjects = @(Get-NetworkPropertyValues -InputObject $cfg -PropertyName 'DNSServer')
-                        $ipv4Gateways = @(Get-NetworkPropertyValues -InputObject $ipv4GatewayObjects -PropertyName 'NextHop')
+                        $ipv4Gateways = @($ipv4GatewayObjects | ForEach-Object { Get-InventoryNetRouteNextHop -Route $_ } | Where-Object { $_ })
                         $dnsServers = @(Get-NetworkPropertyValues -InputObject $dnsServerObjects -PropertyName 'ServerAddresses')
                     }
 
@@ -143,5 +187,10 @@ function Get-NetworkInventory {
         Write-Warning ("No se pudo recopilar la información de red: {0}" -f $_.Exception.Message)
     }
 
-    return $result
+    # Same output-stream-boundary hazard fixed elsewhere in this project
+    # (see Get-GraphicsInventory): a bare `return $result` collapses to a
+    # scalar when the adapter list has exactly one element — the common
+    # case on most machines (one NIC, or only Wi-Fi enabled). The comma
+    # operator guards the array across the return's output-stream boundary.
+    return ,$result
 }

@@ -1,0 +1,188 @@
+﻿Describe 'Start-Inventory.ps1 collection session forwarding' {
+    BeforeAll {
+        $script = Get-Content "$PSScriptRoot/../Start-Inventory.ps1" -Raw
+    }
+
+    It 'reads the configured collection session once at startup' {
+        $script | Should -Match '\$config\.CollectionSession'
+        $script | Should -Match '\$collectionArguments'
+    }
+
+    It 'forwards the same context to full and quick inventory collection' {
+        $script | Should -Match '&\s+\$collector\s+-Mode\s+Full\s+@collectionArguments'
+        $script | Should -Match '&\s+\$collector\s+-Mode\s+Quick\s+@collectionArguments'
+    }
+
+    It 'builds a real CollectionSession entity once, before dispatching any inventory mode' {
+        $script | Should -Match 'New-InventoryCollectionSession\.ps1'
+        $script | Should -Match '\$collectionSession\s*=\s*New-InventoryCollectionSession'
+    }
+
+    It 'forwards only the resolved scalar session id to the collector' {
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*SessionId\s*=\s*\$collectionSession\.SessionId[^}]*\}'
+        $script | Should -Not -Match '\$collectionArguments\s*=\s*@\{[^}]*OrganizationId'
+    }
+
+    It 'forwards the visit-resolved technician (not the raw session technician) alongside the session id' {
+        # doc07-Catalog-System.md "Reutilización durante visita": the
+        # technician can be confirmed/overridden interactively once per
+        # visit via Read-InventoryVisitContext, so $collectionArguments
+        # forwards $visitTechnician, not $collectionSession.Technician directly.
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*SessionId\s*=\s*\$collectionSession\.SessionId[^}]*Technician\s*=\s*\$visitTechnician[^}]*\}'
+    }
+
+    It 'resolves manual field keys from the active organization profile, falling back to config.json' {
+        $script | Should -Match 'InventoryOrganizationPackage\.ps1'
+        $script | Should -Match 'Get-InventoryProfileManualFields'
+        $script | Should -Match '-OrganizationId\s+\$collectionSession\.OrganizationId'
+        $script | Should -Match '-ProfileId\s+\$collectionSession\.ProfileId'
+        $script | Should -Match '-FallbackFields\s+@\(\$config\.ManualFields\)'
+    }
+
+    It 'forwards the resolved manual field keys to the collector' {
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*ManualFieldKeys\s*=\s*\$manualFieldKeys[^}]*\}'
+    }
+
+    It 'loads the organization unit catalog and forwards it to the collector' {
+        $script | Should -Match 'Get-InventoryOrganizationUnitCatalog'
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*OrganizationUnits\s*=\s*\$organizationUnits[^}]*\}'
+    }
+
+    It 'loads the independent department unit catalog and forwards it to the collector' {
+        # doc07-Catalog-System.md flat/independent mode: institutions whose
+        # Dirección and Departamento have no reliable parent-child
+        # relationship ship a second, independent catalogs/departments.json.
+        $script | Should -Match 'Get-InventoryDepartmentUnitCatalog'
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*DepartmentUnits\s*=\s*\$departmentUnits[^}]*\}'
+    }
+
+    It 'resolves a reusable visit context (Técnico/Dirección/Departamento) once, before the main menu loop' {
+        # doc07-Catalog-System.md "Reutilización durante visita": the
+        # technician confirms/overrides these once for a whole batch of
+        # machines instead of being asked on every single collection.
+        $script | Should -Match 'Modules\\New-InventoryManualCapture\.ps1'
+        $script | Should -Match 'function\s+Read-InventoryVisitContext'
+        $script | Should -Match '\$visitContext\s*=\s*Read-InventoryVisitContext'
+        $script | Should -Match '\$visitTechnician\s*=\s*\$visitContext\.Technician'
+        $script | Should -Match '\$visitPresetValues\s*=\s*\$visitContext\.PresetValues'
+        # Resolved before the do/while menu loop starts, not inside it.
+        $script | Should -Match '(?s)\$visitContext\s*=\s*Read-InventoryVisitContext.*?\bdo\s*\{'
+    }
+
+    It 'forwards the visit-resolved preset manual field values to the collector' {
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*PresetManualFieldValues\s*=\s*\$visitPresetValues[^}]*\}'
+    }
+
+    It 'offers a menu option to change the visit context (Dirección/Departamento/Técnico) without restarting' {
+        $script | Should -Match '"9\.\s+Cambiar contexto de esta visita'
+        $script | Should -Match '(?s)"9"\s*\{.*?Read-InventoryVisitContext'
+    }
+
+    It 'auto-detects the organization package when config.json does not pin one explicitly, before building the session' {
+        $script | Should -Match 'Get-InventoryAutoDetectedOrganizationId'
+        # Must run before New-InventoryCollectionSession is called, so an
+        # auto-detected OrganizationId actually reaches $collectionSession
+        # instead of arriving too late to matter.
+        $script | Should -Match '(?s)Get-InventoryAutoDetectedOrganizationId.*?New-InventoryCollectionSession\s+@sessionParameters'
+    }
+
+    It 'builds readable field labels combining the hardcoded defaults with the active organization''s custom-fields.json' {
+        # "Labels legibles" task: the technician sees "Dirección" / "Número
+        # patrimonial" / etc. instead of the raw assignment.organizationUnitId
+        # / asset.assetTag dotted keys, both in the per-machine capture and in
+        # the reusable visit-context prompts.
+        $script | Should -Match 'Get-InventoryCustomFieldDefinitions'
+        $script | Should -Match '\$fieldLabels\s*='
+        $script | Should -Match '\$collectionArguments\s*=\s*@\{[^}]*FieldLabels\s*=\s*\$fieldLabels[^}]*\}'
+    }
+
+    It 'forwards the readable field labels into the reusable visit context' {
+        $script | Should -Match '(?s)function\s+Read-InventoryVisitContext\s*\{.*?\$FieldLabels'
+        $script | Should -Match '(?s)\$visitContext\s*=\s*Read-InventoryVisitContext.*?-FieldLabels\s+\$fieldLabels'
+    }
+
+    It 'only offers root-level units at the Dirección prompt of the visit context, never a nested Departamento' {
+        # Real field bug: ConvertTo-InventoryOrganizationUnitMenu renders the
+        # FULL tree of whatever -Units it gets, children included — passing
+        # the whole catalog straight through let a technician pick a
+        # Departamento-level entry by mistake at the Dirección step. Must be
+        # filtered to root units (parentId = null) first.
+        $script | Should -Match '(?s)function\s+Read-InventoryVisitContext\s*\{.*?\$rootOrganizationUnits\s*=\s*Get-InventoryOrganizationUnitChildren\s+-Units\s+\$OrganizationUnits\s+-ParentId\s+\$null.*?Read-InventoryOrganizationUnitSelection\s+-Units\s+\$rootOrganizationUnits\s+-Label\s+\$directionLabel'
+    }
+
+    It 'searches recursively for the last report/diagnostic, since outputs now live in per-hostname subfolders' {
+        # Collector_Hardware_Inventory.ps1/Collector_Windows_HealthCheck.ps1
+        # write into $outputDir\<Hostname>\... now (Get-InventoryHostOutputDirectory),
+        # not flat in $outputDir — without -Recurse these menu options would
+        # silently find nothing.
+        $script | Should -Match 'Get-ChildItem\s+-LiteralPath\s+\$output\s+-Filter\s+"\*\.html"\s+-Recurse'
+        $script | Should -Match 'Get-ChildItem\s+-LiteralPath\s+\$output\s+-Filter\s+"\*-health\.html"\s+-Recurse'
+    }
+
+    It 'dot-sources the consolidated-workbook module for host-history record lookups' {
+        $script | Should -Match 'Modules\\New-InventoryConsolidatedWorkbook\.ps1'
+    }
+
+    It 'resolves the hostname the same way the collector itself does, before checking for a prior collection' {
+        $script | Should -Match "-replace\s+'\[\^a-zA-Z0-9_-\]'\s*,\s*'_'"
+    }
+
+    It 'defines a reusable prior-collection check before the main menu loop' {
+        # "Ya se recolectó este equipo" warning: resolved as its own function
+        # (same pattern as Read-InventoryVisitContext), not inlined into each
+        # menu branch, so it stays a single source of truth for both Full and
+        # Quick collection.
+        $script | Should -Match 'function\s+Read-InventoryPriorCollectionCheck'
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?\bdo\s*\{'
+    }
+
+    It 'looks up the most recent prior record for this host inside the prior-collection check' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Get-InventoryHostOutputDirectory.*?Get-InventoryLatestHostRecord'
+    }
+
+    It 'warns with the prior collection''s date/time and asks for confirmation before continuing' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Read-Host\s+"¿Desea continuar de todas formas\? \(S/N\)"'
+    }
+
+    It 'reports Proceed = false when the technician declines, so the caller can abort cleanly with no partial state' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Proceed\s*=\s*\$false'
+    }
+
+    It 'extracts host-history default values through the testable module function, forwarding the visit PresetValues for precedence' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Get-InventoryHostHistoryDefaultValues\s+-PriorRecord\s+\$priorRecord\s+-PresetValues\s+\$PresetValues'
+    }
+
+    It 'gates full inventory collection on the prior-collection check before invoking the collector' {
+        $script | Should -Match '(?s)"1"\s*\{.*?\$priorCollectionCheck\s*=\s*Read-InventoryPriorCollectionCheck.*?if\s*\(\s*\$priorCollectionCheck\.Proceed\s*\)\s*\{.*?&\s+\$collector\s+-Mode\s+Full\s+@collectionArguments'
+    }
+
+    It 'gates quick inventory collection on the prior-collection check before invoking the collector' {
+        $script | Should -Match '(?s)"2"\s*\{.*?\$priorCollectionCheck\s*=\s*Read-InventoryPriorCollectionCheck.*?if\s*\(\s*\$priorCollectionCheck\.Proceed\s*\)\s*\{.*?&\s+\$collector\s+-Mode\s+Quick\s+@collectionArguments'
+    }
+
+    It 'forwards the host-history default values into the collector arguments, distinct from PresetManualFieldValues' {
+        $script | Should -Match '\$collectionArguments\.DefaultManualFieldValues\s*=\s*\$priorCollectionCheck\.DefaultValues'
+    }
+
+    It 'auto-generates a real SessionId when config.json does not pin one explicitly, before building the session' {
+        # Bugfix: entering a Técnico via the visit-context prompt used to
+        # leave the administration "Nuevos equipos" table showing
+        # SES-UNASSIGNED anyway, since SessionId and Technician were resolved
+        # completely independently. Same pattern as the OrganizationId
+        # auto-detection right above: an explicit config.json SessionId
+        # always wins over auto-generation.
+        $script | Should -Match 'Test-InventorySessionIdUnassigned'
+        $script | Should -Match 'Get-InventoryAutoGeneratedSessionId'
+        $script | Should -Match '(?s)Test-InventorySessionIdUnassigned.*?New-InventoryCollectionSession\s+@sessionParameters'
+    }
+
+    It 'persists the visit-resolved Técnico back to config.json right after the initial visit-context resolution' {
+        # So the name survives across separate launches of Start-Inventory.ps1
+        # instead of only living in-memory for the current run.
+        $script | Should -Match '(?s)\$visitContext\s*=\s*Read-InventoryVisitContext.*?\$visitTechnician\s*=\s*\$visitContext\.Technician.*?Update-InventoryConfigTechnician\s+-ConfigPath\s+\$configPath\s+-Technician\s+\$visitTechnician.*?\bdo\s*\{'
+    }
+
+    It 'persists the visit-resolved Técnico back to config.json again from the "Cambiar contexto" menu option' {
+        $script | Should -Match '(?s)"9"\s*\{.*?\$visitTechnician\s*=\s*\$visitContext\.Technician.*?Update-InventoryConfigTechnician\s+-ConfigPath\s+\$configPath\s+-Technician\s+\$visitTechnician'
+    }
+}

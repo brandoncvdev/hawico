@@ -1,6 +1,6 @@
 ﻿function Get-ProcessorInventory {
     $processorsRaw = Get-CimDataSafe -ClassName "Win32_Processor"
-    return @(
+    return ,@(
         $processorsRaw | ForEach-Object {
             [ordered]@{
                 Name                      = Get-SafeString $_.Name

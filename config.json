@@ -9,5 +9,51 @@
   "IncludePeripherals": true,
   "IncludeDeviceErrors": true,
   "OutputDirectory": ".\\Output",
-  "LogDirectory": ".\\Logs"
+  "LogDirectory": ".\\Logs",
+  "CollectionSession": {
+    "SessionId": "SES-UNASSIGNED",
+    "OrganizationId": null,
+    "ProfileId": "basic-inventory",
+    "Technician": null
+  },
+  "ManualFields": [
+    "assignment.user.fullName",
+    "assignment.organizationUnitId",
+    "assignment.departmentUnitId",
+    "collection.observations"
+  ],
+  "Consolidation": {
+    "RecordsPath": ".\\Output",
+    "OutputPath": ".\\Output\\Consolidado.xlsx",
+    "HistoryDirectory": ".\\Output\\Historico"
+  },
+  "Administration": {
+    "RecordsPath": ".\\Output",
+    "BasePath": ".",
+    "ReportsDirectory": ".\\Administracion\\Reportes"
+  },
+  "OrganizationPackages": {
+    "BasePath": ".\\Config\\Organizations"
+  },
+  "HealthCheck": {
+    "SampleDurationSeconds": 60,
+    "SampleIntervalSeconds": 1,
+    "EventLookbackDays": 7,
+    "MinimumFreeDiskPercent": 20,
+    "CriticalFreeDiskPercent": 10,
+    "MemoryWarningPercent": 70,
+    "MemoryHighPercent": 85,
+    "MemoryCriticalPercent": 95,
+    "MinimumAvailableMemoryMB": 1024,
+    "TopProcessCount": 10,
+    "IncludePersonallyIdentifiableInformation": false,
+    "StoragePendingSectorCriticalCount": 1,
+    "StorageAvailableSpareCriticalPercent": 10,
+    "StorageReallocatedSectorWarningCount": 1,
+    "StorageWearWarningPercent": 70,
+    "StorageWearHighPercent": 90,
+    "StorageTemperatureWarningC": 55,
+    "StorageTemperatureHighC": 65,
+    "StorageHddServiceLifeWarningHours": 26280
+  }
 }

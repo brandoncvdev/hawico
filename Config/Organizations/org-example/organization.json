@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "packageVersion": "0.1.0",
+  "organizationId": "org-example",
+  "name": "Organización de ejemplo",
+  "defaultProfileId": "basic-inventory",
+  "organizationUnitLabels": ["Sede", "Dirección", "Departamento", "Área"],
+  "updatedAt": "2026-08-03T12:40:00-06:00"
+}

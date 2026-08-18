@@ -90,4 +90,6 @@ $($_ | Out-String)
     Write-Host $startupLog -ForegroundColor Yellow
     Write-Host ""
     Write-Host "La ventana permanecerá abierta." -ForegroundColor Yellow
+    Write-Host ""
+    [void](Read-Host "Presione Enter para cerrar")
 }
