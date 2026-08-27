@@ -206,12 +206,13 @@ function ConvertTo-InventoryWorkbookRow {
 
     $storageReplacement = Get-InventoryStorageReplacementAssessment -StorageFindings $technicalData.StorageFindings
 
-    # Column order and headers follow docs/INSTITUTIONAL_EXCEL_MAPPING.md A-Z.
-    # The RAM-assessment columns (S, T, U) and disk-sizing columns (V, W)
-    # were removed: hawico has no memory-upgrade or disk-sizing rule engine,
-    # so those would only ever be null placeholders. CANTIDAD REQUERIDA
-    # (CAMBIO) is disambiguated from the removed "CANTIDAD REQUERIDA"
-    # headers it used to share a name with.
+    # Column order and headers follow docs/INSTITUTIONAL_EXCEL_MAPPING.md A-Z,
+    # plus HOSTNAME appended as hawico-only column AA (see that column's own
+    # comment below). The RAM-assessment columns (S, T, U) and disk-sizing
+    # columns (V, W) were removed: hawico has no memory-upgrade or
+    # disk-sizing rule engine, so those would only ever be null placeholders.
+    # CANTIDAD REQUERIDA (CAMBIO) is disambiguated from the removed "CANTIDAD
+    # REQUERIDA" headers it used to share a name with.
     return [PSCustomObject][ordered]@{
         # Confirmed against the institution's real nuevo_equipos_optimizado.xlsx:
         # REVISADO holds the capture date/time, not a generic review-status
@@ -246,6 +247,17 @@ function ConvertTo-InventoryWorkbookRow {
         'CANTIDAD REQUERIDA (CAMBIO)' = $storageReplacement.Count
         'CAMBIO DE EQUIPO' = $storageReplacement.Reason
         'S.O' = Get-SafeString $technicalData.OperatingSystem.Caption
+        # hawico-only addition (column AA) — appended after the institutional
+        # A-Z template, never inserted in the middle: docs/INSTITUTIONAL_EXCEL_MAPPING.md
+        # requires the existing A-Z layout and its total formulas to stay
+        # untouched. Lets a spreadsheet row be matched back to its
+        # Output\Equipos Obtenidos\<Hostname>...\ folder without opening it.
+        # Sourced from the top-level Record.ComputerName (the sanitized
+        # hostname New-InventoryCollectionRecord copies from
+        # Asset.ComputerName), not from TechnicalData.Computer.Hostname
+        # directly, to read the same value the rest of the record already
+        # treats as this computer's canonical name.
+        'HOSTNAME' = Get-SafeString $Record.ComputerName
     }
 }
 

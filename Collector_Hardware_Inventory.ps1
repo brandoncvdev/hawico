@@ -63,20 +63,6 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $hostname = $env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
-
-# Every artifact for this computer lands under its own subfolder instead of
-# flat in OutputDirectory, grouping one machine's whole history together
-# (Modules\Common.ps1's Get-InventoryHostOutputDirectory). Record-discovery
-# for Excel consolidation and administration import already scans
-# recursively (Get-InventoryConsolidatedRecords -Recurse), so this does not
-# break either of those; only Start-Inventory.ps1's "abrir último
-# reporte"/"diagnóstico" menu options needed -Recurse added for the same reason.
-$hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostname
-New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
-
-$jsonPath = Join-Path $hostOutputDir "$hostname-$timestamp.json"
-$recordJsonPath = Join-Path $hostOutputDir "$hostname-$timestamp-record.json"
-$htmlPath = Join-Path $hostOutputDir "$hostname-$timestamp.html"
 $logPath = Join-Path $logDir "$hostname-$timestamp.log"
 
 try {
@@ -251,6 +237,35 @@ try {
     else {
         ,@()
     }
+
+    # The assigned user's captured full name (if any) is only known now, after
+    # manual capture ran above — extracted here so the per-host output folder
+    # created below can carry it as a display-name suffix
+    # ("DESKTOP-A93JX - Juan Perez") instead of the bare hostname, making a
+    # machine easy to identify without opening its folder. Absent/skipped
+    # (allowSkip) falls back to $null, which Get-InventoryHostOutputDirectory
+    # treats the same as today's hostname-only behavior.
+    $assignedUserField = $manualFields |
+        Where-Object { $_.Key -eq 'assignment.user.fullName' } |
+        Select-Object -First 1
+    $assignedUserFullName = if ($null -ne $assignedUserField) { $assignedUserField.Value } else { $null }
+
+    # Every artifact for this computer lands under its own subfolder instead of
+    # flat in OutputDirectory, grouping one machine's whole history together
+    # (Modules\Common.ps1's Get-InventoryHostOutputDirectory). Record-discovery
+    # for Excel consolidation and administration import already scans
+    # recursively (Get-InventoryConsolidatedRecords -Recurse), so this does not
+    # break either of those; only Start-Inventory.ps1's "abrir último
+    # reporte"/"diagnóstico" menu options needed -Recurse added for the same reason.
+    # Moved here (after manual capture, before the file-write block below)
+    # instead of its original spot right after $outputDir, specifically so
+    # $assignedUserFullName is available before the folder is created.
+    $hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostname -DisplayName $assignedUserFullName
+    New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
+
+    $jsonPath = Join-Path $hostOutputDir "$hostname-$timestamp.json"
+    $recordJsonPath = Join-Path $hostOutputDir "$hostname-$timestamp-record.json"
+    $htmlPath = Join-Path $hostOutputDir "$hostname-$timestamp.html"
 
     $collectorVersion = Get-CollectorVersion -BasePath $basePath
 

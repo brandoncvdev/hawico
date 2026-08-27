@@ -147,9 +147,10 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         $row.'TIPO DISCO' | Should -Be 'NVMe/HDD'
         $row.'DISCO (GB)' | Should -Be 1408.45
         $row.'S.O' | Should -Be 'Microsoft Windows 10 Pro'
+        $row.'HOSTNAME' | Should -Be 'RH-PC-04'
     }
 
-    It 'returns a PSCustomObject with columns in the documented A-to-Z order' {
+    It 'returns a PSCustomObject with columns in the documented A-to-AA order' {
         $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord)
 
         $row | Should -BeOfType [System.Management.Automation.PSCustomObject]
@@ -159,8 +160,26 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
             'MARCA', 'MODELO', 'PC / LAPTOP', 'PROCESADOR', 'GHz',
             'RAM INSTALADA', 'MODULOS INSTALADOS', 'SLOTS RAM', 'RAM MAX (GB)',
             'TIPO RAM', 'TIPO DISCO', 'DISCO (GB)',
-            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O'
+            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O', 'HOSTNAME'
         )
+    }
+
+    It 'adds HOSTNAME as the new last column (AA), sourced from Record.ComputerName' {
+        # hawico-only addition, appended after the institutional A-Z template
+        # (docs/INSTITUTIONAL_EXCEL_MAPPING.md) — never inserted in the middle,
+        # so it must never disturb the existing A-Z column order or headers.
+        # Sourced from the top-level Record.ComputerName (set by
+        # New-InventoryCollectionRecord from the sanitized Asset.ComputerName),
+        # not from TechnicalData.Computer.Hostname directly — this test uses a
+        # record where the two differ to prove the correct source is read.
+        $record = New-FixtureRecord -ComputerName 'DESKTOP-A93JX'
+        $record.TechnicalData.Computer.Hostname = 'STALE-HOSTNAME-FROM-JSON'
+
+        $row = ConvertTo-InventoryWorkbookRow -Record $record
+
+        $names = @($row.PSObject.Properties.Name)
+        $names[-1] | Should -Be 'HOSTNAME'
+        $row.'HOSTNAME' | Should -Be 'DESKTOP-A93JX'
     }
 
     It 'leaves REVISADO null instead of throwing when CollectedAt is missing or unparsable' {

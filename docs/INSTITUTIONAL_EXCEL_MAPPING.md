@@ -44,6 +44,7 @@ El Excel es una proyección de presentación. No es la fuente de verdad.
 | X | CANTIDAD REQUERIDA (cambio) | Assessment (SMART) | `Get-InventoryStorageReplacementAssessment` sobre `TechnicalData.StorageFindings` (proyección de `Get-StorageSmartSummary`/STO-006..012). `1` si hay al menos un hallazgo `Critical`/`High` de almacenamiento; `null` si no. `Get-StorageSmartSummary` agrega "peor caso" entre todos los discos, así que no identifica cuál disco específico — no se inventa un conteo por disco. | Disponible |
 | Y | CAMBIO DE EQUIPO | Assessment (SMART) | Títulos (join `; `) de los hallazgos `Critical`/`High` que dispararon la columna X. `null` si X es `null`. | Disponible |
 | Z | S.O | Windows | `TechnicalData.OperatingSystem.Caption`. | Disponible |
+| AA | HOSTNAME | CollectionRecord | Adición exclusiva de hawico, **no forma parte de la plantilla institucional original**. Se agrega al final, después de la columna Z, sin reordenar, renombrar ni tocar ninguna columna A-Z existente ni sus fórmulas de totales. Proyecta `CollectionRecord.ComputerName` (el nombre de equipo saneado que `New-InventoryCollectionRecord` copia de `Asset.ComputerName`), no `TechnicalData.Computer.Hostname` directamente. Permite ubicar la carpeta `Output\Equipos Obtenidos\<Hostname>...\` de un equipo a partir de su fila en el consolidado, sin necesidad de abrirla. | Disponible |
 
 ## Campos adicionales que no caben en la plantilla
 

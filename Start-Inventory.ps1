@@ -227,7 +227,7 @@ try {
     # "Ya se recolectó este equipo" warning + host-history defaults: before
     # dispatching Collector_Hardware_Inventory.ps1, check whether this host
     # already has a prior *-record.json under Output\<Hostname>\
-    # (Get-InventoryHostOutputDirectory / Get-InventoryLatestHostRecord). If
+    # (Resolve-InventoryHostOutputDirectory / Get-InventoryLatestHostRecord). If
     # one exists, warn the technician with that collection's date/time and
     # let them abort instead of silently re-collecting. Confirming (or no
     # prior record at all) reuses Nombre/Dirección/Departamento from that
@@ -243,8 +243,16 @@ try {
             [AllowNull()][hashtable]$PresetValues = @{}
         )
 
-        $hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $OutputDirectory -Hostname $Hostname
-        $priorRecord = Get-InventoryLatestHostRecord -HostOutputDirectory $hostOutputDir
+        # Resolve-InventoryHostOutputDirectory (read-only lookup), not
+        # Get-InventoryHostOutputDirectory — this must find a folder that
+        # already carries a display-name suffix
+        # (Collector_Hardware_Inventory.ps1), and must never mint/create a
+        # new folder name of its own. HostOutputDirectory below is
+        # Mandatory, so a $null result (no prior folder at all — first-ever
+        # collection for this machine) is short-circuited here instead of
+        # being passed through.
+        $hostOutputDir = Resolve-InventoryHostOutputDirectory -BaseOutputDirectory $OutputDirectory -Hostname $Hostname
+        $priorRecord = if ($null -ne $hostOutputDir) { Get-InventoryLatestHostRecord -HostOutputDirectory $hostOutputDir } else { $null }
 
         if ($null -eq $priorRecord) {
             return [ordered]@{ Proceed = $true; DefaultValues = @{} }

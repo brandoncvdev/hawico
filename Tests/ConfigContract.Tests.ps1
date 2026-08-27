@@ -21,6 +21,18 @@
  }
 }
 
+Describe 'config.json OutputDirectory contract' {
+ It 'nests per-machine collection output one level under Output, away from Historico/Consolidado.xlsx' {
+  # Hundreds of machines' folders used to sit flat under Output\ at the same
+  # level as Output\Historico\ and Output\Consolidado.xlsx, making them hard
+  # to find. Export-InventoryWorkbook.ps1's own OutputPath/HistoryDirectory
+  # defaults stay at the Output root on purpose — only per-host collection
+  # output moves one level deeper.
+  $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
+  $c.OutputDirectory|Should -Be '.\Output\Equipos Obtenidos'
+ }
+}
+
 Describe 'config.json CollectionSession contract' {
  It 'contains backward-compatible collection context defaults' {
   $c=Get-Content "$PSScriptRoot/../config.json" -Raw|ConvertFrom-Json
