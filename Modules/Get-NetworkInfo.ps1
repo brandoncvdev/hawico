@@ -26,10 +26,59 @@
     return Get-SafeString $Route.NextHop
 }
 
+function Test-InventoryNetworkAdapterIsVirtual {
+    param(
+        [AllowNull()][object]$Adapter
+    )
+
+    # Defense-in-depth virtual-adapter detector — real-world bug: a Hyper-V
+    # host reports "vEthernet (Default Switch)" (Hyper-V's built-in NAT
+    # virtual switch, present by default since Windows 10 1809+ when Hyper-V
+    # is enabled) alongside the real physical NIC. That adapter's
+    # HardwareInterface came back unreported ($null) on the reporting
+    # machine, which the previous HardwareInterface-only filter treated as
+    # "keep it" (a deliberate safety net for genuinely ambiguous hardware).
+    # Checked in priority order, trusting an explicit provider value over a
+    # guess, but guessing when the provider reports nothing at all:
+    #   1. Virtual -eq $true            — Get-NetAdapter's own documented
+    #      boolean for exactly this purpose (NetAdapter module, Windows 8 /
+    #      Server 2012+); the most reliable signal, checked first.
+    #   2. HardwareInterface -eq $false — the existing signal, still useful.
+    #   3. Name/InterfaceDescription pattern fallback — ONLY consulted when
+    #      both properties above are absent or unreported ($null), matching
+    #      known virtual/software adapter markers (Hyper-V, other common
+    #      hypervisors, VPN/tunnel adapters, loopback, Bluetooth PAN, etc.).
+    # A pure function over a property bag on purpose, so it is independently
+    # unit-testable with fixture objects — no real Get-NetAdapter call.
+    if ($null -eq $Adapter) {
+        return $false
+    }
+
+    if ($Adapter.PSObject.Properties.Name -contains 'Virtual' -and $null -ne $Adapter.Virtual) {
+        return ($Adapter.Virtual -eq $true)
+    }
+
+    if ($Adapter.PSObject.Properties.Name -contains 'HardwareInterface' -and $null -ne $Adapter.HardwareInterface) {
+        return ($Adapter.HardwareInterface -eq $false)
+    }
+
+    $name = "{0} {1}" -f $Adapter.Name, $Adapter.InterfaceDescription
+    return ($name -match '(?i)hyper-v|vethernet|virtual\s*(ethernet|switch|adapter|network)|vmware|virtualbox|vbox|tap-windows|tap adapter|loopback|wan miniport|teredo|isatap|bluetooth')
+}
+
 function Get-NetworkAdapterType {
     param(
         [AllowNull()][object]$Adapter
     )
+
+    # Checked BEFORE the Wi-Fi/Ethernet regexes: "Hyper-V Virtual Ethernet
+    # Adapter" literally contains the word "Ethernet", so the Ethernet regex
+    # alone would misclassify it — a distinct 'Virtual' label is needed so
+    # downstream adapter-selection logic can tell physical and virtual
+    # adapters apart even after this classification step.
+    if (Test-InventoryNetworkAdapterIsVirtual -Adapter $Adapter) {
+        return 'Virtual'
+    }
 
     $name = "{0} {1}" -f $Adapter.Name, $Adapter.InterfaceDescription
 
@@ -102,13 +151,24 @@ function Get-NetworkInventory {
         $adapters = @(Get-NetAdapter -ErrorAction Stop)
 
         # Se priorizan adaptadores físicos para evitar interfaces de VPN, Hyper-V,
-        # contenedores y adaptadores virtuales. Si el proveedor no reporta HardwareInterface,
-        # se conserva el adaptador para no perder hardware real.
-        $adapters = @(
-            $adapters | Where-Object {
-                $_.HardwareInterface -eq $true -or $null -eq $_.HardwareInterface
-            }
-        )
+        # contenedores y adaptadores virtuales, usando la detección multi-señal de
+        # Test-InventoryNetworkAdapterIsVirtual (Virtual, luego HardwareInterface,
+        # luego el patrón de nombre/descripción como último recurso).
+        #
+        # Defensivo: si ese filtro eliminaría TODOS los adaptadores reportados (p.ej.
+        # una VM inventariada a propósito, donde el único adaptador es virtual), se
+        # conserva la lista original sin filtrar en lugar de devolver cero adaptadores
+        # y ocultar por completo la información de red — mismo espíritu que el
+        # comentario original ("no perder hardware real" cuando el proveedor es
+        # ambiguo), extendido para no perder TODA la red cuando es lo único que hay.
+        $nonVirtualAdapters = @($adapters | Where-Object { -not (Test-InventoryNetworkAdapterIsVirtual -Adapter $_) })
+
+        if ($nonVirtualAdapters.Count -gt 0) {
+            $adapters = $nonVirtualAdapters
+        }
+        elseif ($adapters.Count -gt 0) {
+            Write-Warning "Todos los adaptadores de red detectados parecen virtuales; se conservan para no ocultar la información de red."
+        }
 
         if (-not $IncludeDisconnectedAdapters) {
             $adapters = @($adapters | Where-Object { $_.Status -eq 'Up' })
