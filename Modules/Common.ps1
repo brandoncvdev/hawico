@@ -193,15 +193,88 @@ function Get-SystemSlotUsageName {
     return "Desconocido ($value)"
 }
 
-function Get-InventoryHostOutputDirectory {
+function Get-InventorySanitizedDisplayName {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSUseShouldProcessForStateChangingFunctions',
         '',
-        Justification = 'Computes an in-memory path without changing system state.'
+        Justification = 'Sanitizes an in-memory string without changing system state.'
+    )]
+    param(
+        [AllowNull()][string]$DisplayName
+    )
+
+    $trimmed = Get-SafeString $DisplayName
+    if ($null -eq $trimmed) {
+        return $null
+    }
+
+    # Strip characters invalid in Windows paths (\ / : * ? " < > |) and
+    # collapse internal whitespace runs, so a captured "Juan   Perez" (or one
+    # containing a stray path separator) never produces an unreadable or
+    # accidentally-nested folder name.
+    $stripped = $trimmed -replace '[\\/:*?"<>|]', ''
+    $collapsed = ($stripped -replace '\s+', ' ').Trim()
+
+    if ([string]::IsNullOrWhiteSpace($collapsed)) {
+        return $null
+    }
+
+    return $collapsed
+}
+
+function Resolve-InventoryHostOutputDirectory {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Reads existing directory names without changing system state.'
     )]
     param(
         [Parameter(Mandatory)][string]$BaseOutputDirectory,
         [Parameter(Mandatory)][string]$Hostname
+    )
+
+    # Read-only lookup for a host folder already on disk under
+    # $BaseOutputDirectory — either the legacy hostname-only name, or a
+    # "$Hostname - DisplayName" folder (Get-InventoryHostOutputDirectory
+    # below). Anchored on the FULL hostname followed by either end-of-string
+    # or a literal " - " separator, so e.g. hostname "PC1" can never match a
+    # folder named "PC10 - Someone".
+    if (-not (Test-Path -LiteralPath $BaseOutputDirectory)) {
+        return $null
+    }
+
+    try {
+        $candidates = @(
+            Get-ChildItem -LiteralPath $BaseOutputDirectory -Directory -ErrorAction Stop
+        )
+    }
+    catch {
+        Write-Warning ("No se pudo leer la carpeta de salida: {0}" -f $_.Exception.Message)
+        return $null
+    }
+
+    $displayNamePrefix = "$Hostname - "
+    $match = $candidates | Where-Object {
+        $_.Name -eq $Hostname -or $_.Name.StartsWith($displayNamePrefix, [StringComparison]::Ordinal)
+    } | Select-Object -First 1
+
+    if ($null -eq $match) {
+        return $null
+    }
+
+    return $match.FullName
+}
+
+function Get-InventoryHostOutputDirectory {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions',
+        '',
+        Justification = 'Renaming an existing host folder to keep its display-name suffix in sync is the whole point of this function; it is not exposed as a general-purpose destructive operation.'
+    )]
+    param(
+        [Parameter(Mandatory)][string]$BaseOutputDirectory,
+        [Parameter(Mandatory)][string]$Hostname,
+        [AllowNull()][string]$DisplayName = $null
     )
 
     # Every artifact for one computer (inventory JSON/HTML, record.json,
@@ -211,5 +284,45 @@ function Get-InventoryHostOutputDirectory {
     # machine's files interleaved. Both collectors already sanitize the
     # hostname before calling this, so it stays a pure Join-Path wrapper
     # instead of duplicating that sanitization here.
+    $sanitizedDisplayName = Get-InventorySanitizedDisplayName -DisplayName $DisplayName
+    $existingDirectory = Resolve-InventoryHostOutputDirectory `
+        -BaseOutputDirectory $BaseOutputDirectory -Hostname $Hostname
+
+    if ($null -ne $existingDirectory) {
+        # -DisplayName $null/empty/whitespace (the field was skipped this
+        # visit) never strips an existing suffix back off — the folder is
+        # returned exactly as it is.
+        if ($null -eq $sanitizedDisplayName) {
+            return $existingDirectory
+        }
+
+        $desiredDirectory = Join-Path $BaseOutputDirectory "$Hostname - $sanitizedDisplayName"
+        if ($existingDirectory -eq $desiredDirectory) {
+            # Already carries this exact name — nothing to do.
+            return $existingDirectory
+        }
+
+        # A different, non-empty display name was captured (hostname-only
+        # folder gaining its first suffix, or a machine reassigned to a new
+        # person): rename the SAME folder in place instead of minting a
+        # second one. Safe because every lookup
+        # (Resolve-InventoryHostOutputDirectory) matches by hostname prefix,
+        # not exact name, and this is a rename — not a copy — so no files or
+        # history are ever lost, the folder is just relabeled.
+        try {
+            Rename-Item -LiteralPath $existingDirectory `
+                -NewName (Split-Path -Leaf $desiredDirectory) -ErrorAction Stop
+            return $desiredDirectory
+        }
+        catch {
+            Write-Warning ("No se pudo renombrar la carpeta del equipo: {0}" -f $_.Exception.Message)
+            return $existingDirectory
+        }
+    }
+
+    if ($null -ne $sanitizedDisplayName) {
+        return Join-Path $BaseOutputDirectory "$Hostname - $sanitizedDisplayName"
+    }
+
     return Join-Path $BaseOutputDirectory $Hostname
 }

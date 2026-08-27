@@ -19,6 +19,14 @@
   # LogPath stays flat in LogDirectory — only "el output" was in scope.
   $script|Should -Match '\$logPath\s*=\s*Join-Path\s+\$logDir'
  }
+ It 'reuses the host folder Collector_Hardware_Inventory.ps1 already created (display-name suffix included), only falling back to a hostname-only folder when none exists yet' {
+  # This collector never runs manual capture, so it cannot independently
+  # know the assigned user's display name — it must not create a second,
+  # differently-named duplicate folder for the same machine.
+  $script|Should -Match 'Resolve-InventoryHostOutputDirectory'
+  $script|Should -Match '\$hostOutputDir\s*=\s*Resolve-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostName'
+  $script|Should -Match '(?s)\$hostOutputDir\s*=\s*Resolve-InventoryHostOutputDirectory.*?if\s*\(\s*\$null\s+-eq\s+\$hostOutputDir\s*\)\s*\{.*?\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostName'
+ }
 }
 
 Describe 'Collector_Storage_Diagnostic.ps1 contract' {
@@ -53,6 +61,11 @@ Describe 'Collector_Storage_Diagnostic.ps1 contract' {
   $script|Should -Match '\$jsonPath\s*=\s*Join-Path\s+\$hostOutputDir'
   $script|Should -Match '\$htmlPath\s*=\s*Join-Path\s+\$hostOutputDir'
   $script|Should -Match '\$logPath\s*=\s*Join-Path\s+\$logDir'
+ }
+ It 'reuses the host folder Collector_Hardware_Inventory.ps1 already created (display-name suffix included), only falling back to a hostname-only folder when none exists yet' {
+  $script|Should -Match 'Resolve-InventoryHostOutputDirectory'
+  $script|Should -Match '\$hostOutputDir\s*=\s*Resolve-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostName'
+  $script|Should -Match '(?s)\$hostOutputDir\s*=\s*Resolve-InventoryHostOutputDirectory.*?if\s*\(\s*\$null\s+-eq\s+\$hostOutputDir\s*\)\s*\{.*?\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostName'
  }
 }
 

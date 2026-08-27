@@ -8,7 +8,7 @@
   "IncludeDisconnectedAdapters": true,
   "IncludePeripherals": true,
   "IncludeDeviceErrors": true,
-  "OutputDirectory": ".\\Output",
+  "OutputDirectory": ".\\Output\\Equipos Obtenidos",
   "LogDirectory": ".\\Logs",
   "CollectionSession": {
     "SessionId": "SES-UNASSIGNED",

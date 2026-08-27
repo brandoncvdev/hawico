@@ -137,7 +137,17 @@
     }
 
     It 'looks up the most recent prior record for this host inside the prior-collection check' {
-        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Get-InventoryHostOutputDirectory.*?Get-InventoryLatestHostRecord'
+        # Resolve-InventoryHostOutputDirectory (read-only lookup), not
+        # Get-InventoryHostOutputDirectory (which would compute/create a
+        # brand-new path) — the display-name suffix a folder may already
+        # carry (from Collector_Hardware_Inventory.ps1) must still be found,
+        # and nothing here should ever mint a new folder name.
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?Resolve-InventoryHostOutputDirectory.*?Get-InventoryLatestHostRecord'
+        $script | Should -Not -Match '\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$OutputDirectory\s+-Hostname\s+\$Hostname'
+    }
+
+    It 'never calls Get-InventoryLatestHostRecord with a $null HostOutputDirectory when no prior folder is found (HostOutputDirectory is mandatory)' {
+        $script | Should -Match '(?s)function\s+Read-InventoryPriorCollectionCheck.*?\$hostOutputDir\s*=\s*Resolve-InventoryHostOutputDirectory[^\n]*\n\s*\$priorRecord\s*=\s*if\s*\(\s*\$null\s+-ne\s+\$hostOutputDir\s*\)\s*\{\s*Get-InventoryLatestHostRecord\s+-HostOutputDirectory\s+\$hostOutputDir\s*\}\s*else\s*\{\s*\$null\s*\}'
     }
 
     It 'warns with the prior collection''s date/time and asks for confirmation before continuing' {

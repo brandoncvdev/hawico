@@ -45,8 +45,16 @@ $hostName = [string]$env:COMPUTERNAME -replace '[^a-zA-Z0-9_-]', '_'
 if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = 'UNKNOWN' }
 # Same per-hostname subfolder as Collector_Hardware_Inventory.ps1, so a
 # machine's health-check output lands next to its inventory instead of a
-# separate flat file elsewhere in OutputDirectory.
-$hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostName
+# separate flat file elsewhere in OutputDirectory. This collector never runs
+# manual capture, so it cannot independently know the assigned user's display
+# name — reuse whatever folder Collector_Hardware_Inventory.ps1 already
+# created (display-name suffix included) instead of creating a second,
+# differently-named duplicate. Only fall back to a hostname-only folder when
+# no prior folder exists yet for this machine (first-ever collection here).
+$hostOutputDir = Resolve-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostName
+if ($null -eq $hostOutputDir) {
+    $hostOutputDir = Get-InventoryHostOutputDirectory -BaseOutputDirectory $outputDir -Hostname $hostName
+}
 New-Item -ItemType Directory -Force -Path $hostOutputDir | Out-Null
 $jsonPath = Join-Path $hostOutputDir "$hostName-$stamp-health.json"
 $htmlPath = Join-Path $hostOutputDir "$hostName-$stamp-health.html"

@@ -93,6 +93,20 @@
         $script | Should -Match '\$htmlPath\s*=\s*Join-Path\s+\$hostOutputDir'
     }
 
+    It 'derives the per-host output folder after manual capture, so the assigned user''s name is known before the folder is created' {
+        # $manualFields (Read-InventoryManualCapture's result) is the only
+        # place assignment.user.fullName is known — the host folder must be
+        # created after it, not before, or the display-name suffix could
+        # never be included.
+        $script | Should -Match '(?s)\$manualFields\s*=\s*if\s*\(.*?\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory'
+        $script | Should -Match '(?s)\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory.*?if\s*\(\s*\[bool\]\$config\.GenerateJSON\s*\)'
+    }
+
+    It 'extracts the assigned user''s full name from the captured manual fields and forwards it as the host folder DisplayName' {
+        $script | Should -Match "-eq\s+'assignment\.user\.fullName'"
+        $script | Should -Match '\$hostOutputDir\s*=\s*Get-InventoryHostOutputDirectory\s+-BaseOutputDirectory\s+\$outputDir\s+-Hostname\s+\$hostname\s+-DisplayName\s+\$\w+'
+    }
+
     It 'resolves the collector version from the shared manifest instead of a hardcoded literal' {
         $script | Should -Match 'Get-CollectorVersion'
         $script | Should -Not -Match "'0\.5\.0'"
