@@ -303,6 +303,73 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
     }
 }
 
+Describe 'Get-InventoryFirstNetworkAdapterWithData' {
+    # Real reported bug: on a machine with Hyper-V enabled, "vEthernet
+    # (Default Switch)" (Hyper-V's built-in NAT virtual switch) and a real
+    # physical "Ethernet" NIC both had IPv4 addresses, and this function
+    # returned whichever one happened to be first in the array — sometimes
+    # the virtual adapter's IP/MAC ended up in the consolidated Excel.
+    It 'returns the physical adapter''s IP/MAC over the Hyper-V virtual adapter''s, regardless of array order' {
+        $virtualAdapter = [PSCustomObject]@{
+            InterfaceAlias = 'vEthernet (Default Switch)'
+            AdapterType    = 'Virtual'
+            MACAddress     = '00-15-5D-01-02-03'
+            IPv4Addresses  = @('172.28.240.1')
+        }
+        $physicalAdapter = [PSCustomObject]@{
+            InterfaceAlias = 'Ethernet'
+            AdapterType    = 'Ethernet'
+            MACAddress     = '00-11-22-33-44-55'
+            IPv4Addresses  = @('192.168.1.50')
+        }
+
+        $virtualFirst = Get-InventoryFirstNetworkAdapterWithData -NetworkAdapters @($virtualAdapter, $physicalAdapter)
+        $virtualFirst.IPv4Address | Should -Be '192.168.1.50'
+        $virtualFirst.MACAddress | Should -Be '00-11-22-33-44-55'
+
+        $virtualLast = Get-InventoryFirstNetworkAdapterWithData -NetworkAdapters @($physicalAdapter, $virtualAdapter)
+        $virtualLast.IPv4Address | Should -Be '192.168.1.50'
+        $virtualLast.MACAddress | Should -Be '00-11-22-33-44-55'
+    }
+
+    It 'falls back to a virtual adapter''s IP/MAC when no physical adapter has any IP data at all' {
+        $virtualAdapter = [PSCustomObject]@{
+            InterfaceAlias = 'vEthernet (Default Switch)'
+            AdapterType    = 'Virtual'
+            MACAddress     = '00-15-5D-01-02-03'
+            IPv4Addresses  = @('172.28.240.1')
+        }
+        $physicalNoIp = [PSCustomObject]@{
+            InterfaceAlias = 'Ethernet'
+            AdapterType    = 'Ethernet'
+            MACAddress     = '00-11-22-33-44-55'
+            IPv4Addresses  = @()
+        }
+
+        $result = Get-InventoryFirstNetworkAdapterWithData -NetworkAdapters @($physicalNoIp, $virtualAdapter)
+
+        $result.IPv4Address | Should -Be '172.28.240.1'
+        $result.MACAddress | Should -Be '00-15-5D-01-02-03'
+    }
+
+    It 'still works when AdapterType is absent on the adapter objects (backward compatibility)' {
+        $adapter = [PSCustomObject]@{
+            InterfaceAlias = 'Ethernet'
+            MACAddress     = '00-11-22-33-44-55'
+            IPv4Addresses  = @('192.168.1.50')
+        }
+
+        $result = Get-InventoryFirstNetworkAdapterWithData -NetworkAdapters @($adapter)
+
+        $result.IPv4Address | Should -Be '192.168.1.50'
+        $result.MACAddress | Should -Be '00-11-22-33-44-55'
+    }
+
+    It 'returns $null when there are no adapters with IP data at all' {
+        Get-InventoryFirstNetworkAdapterWithData -NetworkAdapters @() | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Get-InventoryRecordTechnician' {
     # CollectionRecord has no single top-level "Technician" field — the
     # technician's name is only ever stamped on ManualFields[].CapturedBy,

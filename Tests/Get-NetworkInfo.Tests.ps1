@@ -24,6 +24,7 @@
             [string]$MacAddress = '00-11-22-33-44-55',
             [string]$LinkSpeed = '1 Gbps',
             [AllowNull()]$HardwareInterface = $true,
+            [AllowNull()]$Virtual = $null,
             [string]$MediaConnectionState = 'Connected',
             [string]$DriverDescription = 'Intel(R) Ethernet Driver',
             [string]$DriverVersion = '12.19.1.3'
@@ -37,6 +38,7 @@
             MacAddress           = $MacAddress
             LinkSpeed            = $LinkSpeed
             HardwareInterface    = $HardwareInterface
+            Virtual              = $Virtual
             MediaConnectionState = $MediaConnectionState
             DriverDescription    = $DriverDescription
             DriverVersion        = $DriverVersion
@@ -168,6 +170,145 @@ Describe 'Get-NetworkInventory' {
         $result[0].IsActive | Should -BeTrue
         $result[0].MediaState | Should -Be 'Connected'
         $result[0].DriverName | Should -Be 'Intel(R) Ethernet Driver'
+    }
+}
+
+Describe 'Get-NetworkInventory virtual adapter filtering (real-world Hyper-V vEthernet bug)' {
+    # Real reported bug: a machine with Hyper-V enabled has both
+    # "vEthernet (Default Switch)" (Hyper-V's built-in NAT virtual switch,
+    # Status = 'Up', IP address present) and a real physical NIC. The
+    # consolidated Excel ended up showing the virtual adapter's IP/MAC. On
+    # the reporting machine, HardwareInterface came back unreported ($null)
+    # for the virtual adapter, so the old HardwareInterface-only filter kept
+    # it — this is reproduced here with HardwareInterface = $null, exactly
+    # matching the traced root cause.
+    It 'excludes the Hyper-V vEthernet adapter when a physical adapter is also present, regardless of array order' {
+        foreach ($order in @('virtual-first', 'virtual-last')) {
+            $virtualAdapter = New-FixtureNetAdapter -Name 'vEthernet (Default Switch)' `
+                -InterfaceDescription 'Hyper-V Virtual Ethernet Adapter' -IfIndex 20 -Status 'Up' `
+                -MacAddress '00-15-5D-01-02-03' -HardwareInterface $null
+            $physicalAdapter = New-FixtureNetAdapter -Name 'Ethernet' `
+                -InterfaceDescription 'Intel(R) Ethernet Connection I219-V' -IfIndex 5 -Status 'Up' `
+                -MacAddress '00-11-22-33-44-55'
+
+            $adapters = if ($order -eq 'virtual-first') { @($virtualAdapter, $physicalAdapter) } else { @($physicalAdapter, $virtualAdapter) }
+
+            Mock Get-NetAdapter { $adapters }
+            Mock Get-NetIPConfiguration {
+                @(
+                    [PSCustomObject]@{
+                        InterfaceIndex     = 20
+                        IPv4Address        = @([PSCustomObject]@{ IPAddress = '172.28.240.1' })
+                        IPv6Address        = @()
+                        IPv4DefaultGateway = @()
+                        IPv6DefaultGateway = @()
+                        DNSServer          = @()
+                    }
+                    [PSCustomObject]@{
+                        InterfaceIndex     = 5
+                        IPv4Address        = @([PSCustomObject]@{ IPAddress = '192.168.1.50' })
+                        IPv6Address        = @()
+                        IPv4DefaultGateway = @()
+                        IPv6DefaultGateway = @()
+                        DNSServer          = @()
+                    }
+                )
+            }
+
+            $result = Get-NetworkInventory -IncludeIPv6 $true
+
+            $result.Count | Should -Be 1 -Because "order was $order"
+            $result[0].InterfaceAlias | Should -Be 'Ethernet' -Because "order was $order"
+        }
+    }
+
+    It 'keeps every adapter instead of returning zero results when the virtual filter would eliminate all of them (e.g. a VM being inventoried on purpose)' {
+        Mock Get-NetAdapter {
+            New-FixtureNetAdapter -Name 'vEthernet (Default Switch)' `
+                -InterfaceDescription 'Hyper-V Virtual Ethernet Adapter' -IfIndex 20 -HardwareInterface $null
+        }
+        Mock Get-NetIPConfiguration { New-FixtureNetIPConfiguration -InterfaceIndex 20 }
+
+        $result = Get-NetworkInventory -IncludeIPv6 $true
+
+        $result.Count | Should -Be 1
+        $result[0].InterfaceAlias | Should -Be 'vEthernet (Default Switch)'
+    }
+}
+
+Describe 'Get-NetworkAdapterType' {
+    It 'classifies a real physical Ethernet adapter as Ethernet' {
+        $adapter = New-FixtureNetAdapter -Name 'Ethernet' -InterfaceDescription 'Intel(R) Ethernet Connection I219-V'
+        Get-NetworkAdapterType -Adapter $adapter | Should -Be 'Ethernet'
+    }
+
+    It 'classifies a real Wi-Fi adapter as Wi-Fi' {
+        $adapter = New-FixtureNetAdapter -Name 'Wi-Fi' -InterfaceDescription 'Intel(R) Wireless-AC 9560'
+        Get-NetworkAdapterType -Adapter $adapter | Should -Be 'Wi-Fi'
+    }
+
+    It 'classifies the Hyper-V vEthernet adapter as Virtual instead of falling through to the Ethernet regex' {
+        # Root cause: "Hyper-V Virtual Ethernet Adapter" literally contains
+        # the word "Ethernet", so the Ethernet regex alone would misclassify
+        # it. Test-InventoryNetworkAdapterIsVirtual must be checked first.
+        $adapter = New-FixtureNetAdapter -Name 'vEthernet (Default Switch)' `
+            -InterfaceDescription 'Hyper-V Virtual Ethernet Adapter' -HardwareInterface $null
+        Get-NetworkAdapterType -Adapter $adapter | Should -Be 'Virtual'
+    }
+}
+
+Describe 'Test-InventoryNetworkAdapterIsVirtual' {
+    It 'returns $true when Virtual is explicitly $true (primary signal), even if the name looks unremarkable' {
+        $adapter = [PSCustomObject]@{
+            Name                 = 'Ethernet 3'
+            InterfaceDescription = 'Some Adapter'
+            Virtual              = $true
+            HardwareInterface    = $null
+        }
+
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $adapter | Should -BeTrue
+    }
+
+    It 'returns $true when HardwareInterface is explicitly $false and Virtual is unreported (secondary signal)' {
+        $adapter = [PSCustomObject]@{
+            Name                 = 'Ethernet 4'
+            InterfaceDescription = 'Some Adapter'
+            HardwareInterface    = $false
+        }
+
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $adapter | Should -BeTrue
+    }
+
+    It 'falls back to the name/description pattern when both Virtual and HardwareInterface are absent, and matches known virtual markers' {
+        $adapter = [PSCustomObject]@{
+            Name                 = 'vEthernet (Default Switch)'
+            InterfaceDescription = 'Hyper-V Virtual Ethernet Adapter'
+        }
+
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $adapter | Should -BeTrue
+    }
+
+    It 'returns $false for a real adapter with an unusual name when both Virtual and HardwareInterface are absent (does not over-trigger)' {
+        $adapter = [PSCustomObject]@{
+            Name                 = 'NIC-Principal-07'
+            InterfaceDescription = 'Acme Corp Custom Network Controller'
+        }
+
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $adapter | Should -BeFalse
+    }
+
+    It 'trusts an explicit HardwareInterface $true over the name/description guess (explicit provider signal wins)' {
+        $adapter = [PSCustomObject]@{
+            Name                 = 'vEthernet (Custom NAT)'
+            InterfaceDescription = 'Hyper-V Virtual Ethernet Adapter'
+            HardwareInterface    = $true
+        }
+
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $adapter | Should -BeFalse
+    }
+
+    It 'returns $false for a $null adapter' {
+        Test-InventoryNetworkAdapterIsVirtual -Adapter $null | Should -BeFalse
     }
 }
 

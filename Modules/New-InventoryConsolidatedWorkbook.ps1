@@ -1,19 +1,34 @@
 ﻿function Get-InventoryFirstNetworkAdapterWithData {
     param([AllowNull()][object[]]$NetworkAdapters)
 
-    foreach ($adapter in @($NetworkAdapters)) {
-        if ($null -eq $adapter) { continue }
+    # Two passes: first consider only non-virtual adapters (AdapterType from
+    # Get-NetworkAdapterType, which now classifies Hyper-V/virtual adapters
+    # distinctly instead of falling through to 'Ethernet'); only if NONE of
+    # those has any IPv4 data at all, fall back to a second pass over every
+    # adapter including virtual ones — so a machine that genuinely only has
+    # a virtual/VPN adapter with an IP still reports something instead of a
+    # blank IP/MAC. Real-world bug fixed: a machine with both a Hyper-V
+    # "vEthernet (Default Switch)" adapter and a real physical NIC, both
+    # carrying an IPv4 address, used to report whichever happened to be
+    # first in the array — sometimes the virtual adapter's IP/MAC.
+    foreach ($preferNonVirtual in @($true, $false)) {
+        foreach ($adapter in @($NetworkAdapters)) {
+            if ($null -eq $adapter) { continue }
 
-        # The whole pipeline must be wrapped in @(), not just its input:
-        # Where-Object collapses a single match to a bare scalar otherwise
-        # (the same one-element-array unwrap behavior documented elsewhere
-        # in this module, here triggered by pipeline assignment instead of
-        # `return`).
-        $ipv4 = @(@($adapter.IPv4Addresses) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        if ($ipv4.Count -gt 0) {
-            return [ordered]@{
-                IPv4Address = $ipv4[0]
-                MACAddress = Get-SafeString $adapter.MACAddress
+            $adapterType = if ($adapter.PSObject.Properties.Name -contains 'AdapterType') { $adapter.AdapterType } else { $null }
+            if ($preferNonVirtual -and $adapterType -eq 'Virtual') { continue }
+
+            # The whole pipeline must be wrapped in @(), not just its input:
+            # Where-Object collapses a single match to a bare scalar otherwise
+            # (the same one-element-array unwrap behavior documented elsewhere
+            # in this module, here triggered by pipeline assignment instead of
+            # `return`).
+            $ipv4 = @(@($adapter.IPv4Addresses) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($ipv4.Count -gt 0) {
+                return [ordered]@{
+                    IPv4Address = $ipv4[0]
+                    MACAddress = Get-SafeString $adapter.MACAddress
+                }
             }
         }
     }
