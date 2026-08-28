@@ -148,9 +148,13 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         $row.'DISCO (GB)' | Should -Be 1408.45
         $row.'S.O' | Should -Be 'Microsoft Windows 10 Pro'
         $row.'HOSTNAME' | Should -Be 'RH-PC-04'
+        # The fixture's default ManualFields (see New-FixtureRecord above)
+        # never includes collection.observations, so it's absent here on
+        # purpose — covered on its own below.
+        $row.'OBSERVACIONES' | Should -BeNullOrEmpty
     }
 
-    It 'returns a PSCustomObject with columns in the documented A-to-AA order' {
+    It 'returns a PSCustomObject with columns in the documented A-to-AB order' {
         $row = ConvertTo-InventoryWorkbookRow -Record (New-FixtureRecord)
 
         $row | Should -BeOfType [System.Management.Automation.PSCustomObject]
@@ -160,11 +164,11 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
             'MARCA', 'MODELO', 'PC / LAPTOP', 'PROCESADOR', 'GHz',
             'RAM INSTALADA', 'MODULOS INSTALADOS', 'SLOTS RAM', 'RAM MAX (GB)',
             'TIPO RAM', 'TIPO DISCO', 'DISCO (GB)',
-            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O', 'HOSTNAME'
+            'CANTIDAD REQUERIDA (CAMBIO)', 'CAMBIO DE EQUIPO', 'S.O', 'HOSTNAME', 'OBSERVACIONES'
         )
     }
 
-    It 'adds HOSTNAME as the new last column (AA), sourced from Record.ComputerName' {
+    It 'adds HOSTNAME as column AA, sourced from Record.ComputerName' {
         # hawico-only addition, appended after the institutional A-Z template
         # (docs/INSTITUTIONAL_EXCEL_MAPPING.md) — never inserted in the middle,
         # so it must never disturb the existing A-Z column order or headers.
@@ -178,8 +182,40 @@ Describe 'ConvertTo-InventoryWorkbookRow' {
         $row = ConvertTo-InventoryWorkbookRow -Record $record
 
         $names = @($row.PSObject.Properties.Name)
-        $names[-1] | Should -Be 'HOSTNAME'
+        $names[-2] | Should -Be 'HOSTNAME'
         $row.'HOSTNAME' | Should -Be 'DESKTOP-A93JX'
+    }
+
+    It 'adds OBSERVACIONES as the new last column (AB), sourced from the collection.observations manual field' {
+        # hawico-only addition, same append-only rule as HOSTNAME: never
+        # inserted into the A-Z institutional template. collection.observations
+        # is the technician's free-text notes captured per visit
+        # (Modules/New-InventoryManualCapture.ps1 labels it "Observaciones"),
+        # deliberately never defaulted from prior visits elsewhere in this
+        # file — notes go stale — but that exclusion only affects the
+        # capture-time default, not this projection into the consolidated row.
+        $record = New-FixtureRecord -ManualFields @(
+            [PSCustomObject]@{
+                Key = 'collection.observations'
+                Value = 'Laptop de director juridico'
+                Source = 'VisitCapture'
+                CapturedBy = 'Técnico 01'
+            }
+        )
+
+        $row = ConvertTo-InventoryWorkbookRow -Record $record
+
+        $names = @($row.PSObject.Properties.Name)
+        $names[-1] | Should -Be 'OBSERVACIONES'
+        $row.'OBSERVACIONES' | Should -Be 'Laptop de director juridico'
+    }
+
+    It 'leaves OBSERVACIONES null when collection.observations was skipped/not captured' {
+        $record = New-FixtureRecord -ManualFields @()
+
+        $row = ConvertTo-InventoryWorkbookRow -Record $record
+
+        $row.'OBSERVACIONES' | Should -BeNullOrEmpty
     }
 
     It 'leaves REVISADO null instead of throwing when CollectedAt is missing or unparsable' {

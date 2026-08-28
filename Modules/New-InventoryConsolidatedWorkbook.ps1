@@ -273,6 +273,14 @@ function ConvertTo-InventoryWorkbookRow {
         # directly, to read the same value the rest of the record already
         # treats as this computer's canonical name.
         'HOSTNAME' = Get-SafeString $Record.ComputerName
+        # hawico-only addition (column AB), same append-only rule as HOSTNAME
+        # above. Technician's free-text notes captured per visit
+        # (Modules/New-InventoryManualCapture.ps1 labels the key
+        # "Observaciones"); deliberately excluded elsewhere in this file from
+        # history-default reuse ("notes go stale") — that exclusion is about
+        # what pre-fills the capture prompt on a later visit, not about
+        # whether an already-captured note is shown here.
+        'OBSERVACIONES' = Get-InventoryManualFieldValueByKey -ManualFields $Record.ManualFields -Key 'collection.observations'
     }
 }
 
